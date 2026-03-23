@@ -50,6 +50,41 @@ swift build -c release
 
 Use the menu bar to switch profiles, open the profile editor, or test your controller.
 
+## Use Cases
+
+### Coding from the Couch with Claude Code
+
+Lean back with a controller and pair-program with Claude Code in Ghostty. JoyMapKit auto-switches to the terminal profile when Ghostty is focused.
+
+| Controller | Action |
+|---|---|
+| B (Circle) | Space -- activates voice mode, talk instead of type |
+| A (Cross) | Return -- accept suggestions and confirm prompts |
+| D-Pad Up/Down | Arrow keys -- scroll through history and output |
+| D-Pad Left/Right | Ctrl+Shift+Tab / Ctrl+Tab -- switch terminal tabs |
+| Right Stick | Mouse cursor |
+| Left Stick | Scroll |
+| Triggers | Left/right click |
+| Menu (turbo) | Hold + any button for rapid-fire repeats |
+
+### Desktop Navigation Without a Mouse
+
+Use the controller as a secondary input device at your desk. Right stick moves the cursor, left stick scrolls, triggers click, face buttons handle Return/Escape/Space/Tab, and the D-Pad gives you arrow keys. Works everywhere -- the default profile matches all apps.
+
+### Presentations and Demos
+
+Walk around freely on stage. Advance slides with A, go back with B, switch to a live demo app with a shoulder button, and point at things on screen with the right stick. Set up per-app profiles so bindings change automatically between Keynote and your demo.
+
+### Accessibility
+
+Full desktop control from a gamepad for users with limited keyboard or mouse access. Mouse, scroll, clicks, and common keys work out of the box. Add layers for extra bindings, toggle hold behavior for sticky modifiers, and macros for multi-step actions.
+
+### Browsing from Bed
+
+Scroll pages with the left stick, aim and click links with the right stick and trigger, press X to pause videos, B to go back. No keyboard needed.
+
+See [docs/use-case-scenarios.md](docs/use-case-scenarios.md) for detailed walkthroughs and button maps for each scenario.
+
 ## Configuration
 
 Profiles are JSON files stored in `~/.config/joymapkit/profiles/`. You can edit them in the built-in profile editor or by hand. Example profiles are included in the `Examples/profiles/` directory.
