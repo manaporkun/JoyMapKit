@@ -19,6 +19,7 @@ struct ProfileEditorView: View {
     @State private var selectedProfileName: String?
     @State private var hasChanges = false
     @State private var selectedTab = 0
+    @State private var showTurboAssign = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -75,6 +76,10 @@ struct ProfileEditorView: View {
                     triggersTab
                         .tabItem { Label("Triggers", systemImage: "r2.button.roundedtop.horizontal") }
                         .tag(2)
+
+                    turboTab
+                        .tabItem { Label("Turbo", systemImage: "bolt.fill") }
+                        .tag(3)
                 }
                 .padding()
             } else {
@@ -183,6 +188,94 @@ struct ProfileEditorView: View {
             }
             .padding(.vertical)
         }
+    }
+
+    // MARK: - Turbo Tab
+
+    private var turboTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Turbo Mode")
+                .font(.headline)
+
+            Text("Assign a button as the turbo modifier. Hold it and press any other button to toggle rapid-fire on that button.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Text("Turbo Button:")
+                    .frame(width: 100, alignment: .trailing)
+
+                if let turboButton = editableProfile?.turboButton {
+                    Text(turboButton)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+
+                    Button("Change") { showTurboAssign = true }
+
+                    Button("Remove") {
+                        editableProfile?.turboButton = nil
+                        hasChanges = true
+                    }
+                    .foregroundStyle(.red)
+                } else {
+                    Text("Not assigned")
+                        .foregroundStyle(.secondary)
+
+                    Button("Assign Button") { showTurboAssign = true }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Text("Fire Rate:")
+                    .frame(width: 100, alignment: .trailing)
+
+                let rateMs = Binding<Double>(
+                    get: { Double(editableProfile?.turboRateMs ?? 80) },
+                    set: {
+                        editableProfile?.turboRateMs = Int($0)
+                        hasChanges = true
+                    }
+                )
+                Slider(value: rateMs, in: 20...500, step: 10)
+                    .frame(width: 200)
+
+                Text("\(editableProfile?.turboRateMs ?? 80) ms")
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 60)
+
+                Text("(\(turboRateDescription) presses/sec)")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .disabled(editableProfile?.turboButton == nil)
+
+            Spacer()
+        }
+        .sheet(isPresented: $showTurboAssign) {
+            PressToAssignSheet(
+                capturedElement: Binding(
+                    get: { editableProfile?.turboButton },
+                    set: { newValue in
+                        editableProfile?.turboButton = newValue
+                        if editableProfile?.turboRateMs == nil {
+                            editableProfile?.turboRateMs = 80
+                        }
+                        hasChanges = true
+                    }
+                ),
+                isPresented: $showTurboAssign
+            )
+        }
+    }
+
+    private var turboRateDescription: String {
+        let ms = editableProfile?.turboRateMs ?? 80
+        let rate = 1000.0 / Double(max(ms, 1))
+        return String(format: "%.0f", rate)
     }
 
     // MARK: - Helpers
