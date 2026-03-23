@@ -17,10 +17,11 @@
         <key>SuccessfulExit</key>
         <false/>
     </dict>
+    <!-- Log paths use __HOME__ placeholder; substitute with actual home directory at install time -->
     <key>StandardOutPath</key>
-    <string>/tmp/joymapkit.stdout.log</string>
+    <string>__HOME__/Library/Logs/JoyMapKit/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/joymapkit.stderr.log</string>
+    <string>__HOME__/Library/Logs/JoyMapKit/stderr.log</string>
     <key>ProcessType</key>
     <string>Interactive</string>
 </dict>

@@ -3,8 +3,9 @@ import Logging
 
 /// The heart of the system. Receives raw input events, resolves bindings, dispatches actions.
 /// Supports single bindings, chords, layers, macros, and whileHeld auto-repeat.
+/// - Important: All methods must be called from the main thread (GameController delivers on `.main` queue).
 public final class MappingEngine {
-    private let actionDispatcher: ActionDispatching
+    private var actionDispatcher: ActionDispatching
     private let chordDetector: ChordDetector
     private let layerManager: LayerManager
     private let macroRunner: MacroRunner
@@ -16,6 +17,10 @@ public final class MappingEngine {
     private var activeChordActions: [String: ActionConfig] = [:]
     /// Timers for whileHeld auto-repeat, keyed by element name.
     private var whileHeldTimers: [String: Timer] = [:]
+    /// Pre-indexed base bindings for O(1) lookup by element name.
+    private var bindingIndex: [String: BindingConfig] = [:]
+    /// Pre-indexed per-layer bindings for O(1) lookup.
+    private var layerBindingIndices: [String: [String: BindingConfig]] = [:]
 
     /// Handles analog stick and trigger inputs. Set by JoyMapService.
     public var analogHandler: AnalogHandler?
@@ -35,23 +40,21 @@ public final class MappingEngine {
         }
 
         // Wire action dispatcher callbacks
-        if let dispatcher = actionDispatcher as? ActionDispatcher {
-            dispatcher.onMacro = { [weak self] macro, key, pressed in
-                guard let self else { return }
-                if pressed {
-                    self.macroRunner.start(macro, key: key)
-                } else {
-                    self.macroRunner.cancel(key: key)
-                }
+        self.actionDispatcher.onMacro = { [weak self] macro, key, pressed in
+            guard let self else { return }
+            if pressed {
+                self.macroRunner.start(macro, key: key)
+            } else {
+                self.macroRunner.cancel(key: key)
             }
+        }
 
-            dispatcher.onProfileSwitch = { [weak self] name in
-                self?.onProfileSwitchRequested?(name)
-            }
+        self.actionDispatcher.onProfileSwitch = { [weak self] name in
+            self?.onProfileSwitchRequested?(name)
+        }
 
-            dispatcher.onLayerToggle = { [weak self] name in
-                self?.layerManager.toggle(name)
-            }
+        self.actionDispatcher.onLayerToggle = { [weak self] name in
+            self?.layerManager.toggle(name)
         }
     }
 
@@ -66,6 +69,24 @@ public final class MappingEngine {
         activeProfile = profile
 
         if let profile {
+            // Build pre-indexed binding lookups for O(1) resolution
+            bindingIndex = [:]
+            for binding in profile.bindings {
+                if case .single(let name) = binding.input {
+                    bindingIndex[name] = binding
+                }
+            }
+            layerBindingIndices = [:]
+            for layer in profile.layers {
+                var index: [String: BindingConfig] = [:]
+                for binding in layer.bindings {
+                    if case .single(let name) = binding.input {
+                        index[name] = binding
+                    }
+                }
+                layerBindingIndices[layer.name] = index
+            }
+
             // Configure chord detector with all chord bindings (base + layers)
             var allBindings = profile.bindings
             for layer in profile.layers {
@@ -73,6 +94,9 @@ public final class MappingEngine {
             }
             chordDetector.configure(bindings: allBindings)
             logger.info("Profile activated: \(profile.name)")
+        } else {
+            bindingIndex = [:]
+            layerBindingIndices = [:]
         }
     }
 
@@ -197,6 +221,18 @@ public final class MappingEngine {
     private func applyHoldBehavior(binding: BindingConfig, elementName: String, pressed: Bool, wasHeld: Bool) {
         let holdBehavior = binding.holdBehavior ?? .onPress
 
+        // Toggle must be handled before the general guard since it needs to fire on re-press
+        if case .toggle = holdBehavior, pressed {
+            if let heldAction = heldBindings[elementName] {
+                dispatch(heldAction, pressed: false)
+                heldBindings.removeValue(forKey: elementName)
+            } else {
+                dispatch(binding.action, pressed: true)
+                heldBindings[elementName] = binding.action
+            }
+            return
+        }
+
         guard pressed && !wasHeld else { return }
 
         switch holdBehavior {
@@ -209,13 +245,7 @@ public final class MappingEngine {
             heldBindings[elementName] = binding.action
 
         case .toggle:
-            if heldBindings[elementName] != nil {
-                dispatch(binding.action, pressed: false)
-                heldBindings.removeValue(forKey: elementName)
-            } else {
-                dispatch(binding.action, pressed: true)
-                heldBindings[elementName] = binding.action
-            }
+            break // Already handled above
 
         case .whileHeld(let repeatIntervalMs):
             dispatch(binding.action, pressed: true)
@@ -268,27 +298,18 @@ public final class MappingEngine {
     // MARK: - Private — Binding Resolution
 
     /// Resolve a binding for a single element, checking active layers first (most recently activated wins),
-    /// then falling back to base profile bindings.
+    /// then falling back to base profile bindings. Uses pre-indexed dictionaries for O(1) lookup.
     private func resolveBinding(for elementName: String, in profile: Profile) -> BindingConfig? {
         // Check active layers (reverse order so most-recently-activated wins)
         for layer in profile.layers.reversed() {
             guard layerManager.isActive(layer.name) else { continue }
-            if let binding = findSingleBinding(for: elementName, in: layer.bindings) {
+            if let binding = layerBindingIndices[layer.name]?[elementName] {
                 return binding
             }
         }
 
         // Fall back to base bindings
-        return findSingleBinding(for: elementName, in: profile.bindings)
-    }
-
-    private func findSingleBinding(for elementName: String, in bindings: [BindingConfig]) -> BindingConfig? {
-        bindings.first { binding in
-            if case .single(let name) = binding.input {
-                return name == elementName
-            }
-            return false
-        }
+        return bindingIndex[elementName]
     }
 
     private func dispatch(_ action: ActionConfig, pressed: Bool) {

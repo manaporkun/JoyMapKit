@@ -52,7 +52,13 @@ public final class JoyMapService {
         }
 
         // Load profiles
-        let profiles = (try? profileStore.loadAll()) ?? []
+        let profiles: [Profile]
+        do {
+            profiles = try profileStore.loadAll()
+        } catch {
+            logger.error("Failed to load profiles: \(error)")
+            profiles = []
+        }
         profileResolver.updateProfiles(profiles)
         logger.info("Loaded \(profiles.count) profile(s)")
 

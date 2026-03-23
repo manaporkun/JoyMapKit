@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import CoreGraphics
 
@@ -39,6 +40,8 @@ public final class KeySimulator: KeySimulating {
     public func tapKey(code: UInt16, flags: CGEventFlags = [], holdMs: Int? = nil) throws {
         try pressKey(code: code, flags: flags)
         if let holdMs, holdMs > 0 {
+            // Blocking call — only use from non-cooperative (thread-based) contexts.
+            // MacroRunner handles delays externally via Task.sleep for async contexts.
             Thread.sleep(forTimeInterval: Double(holdMs) / 1000.0)
         }
         try releaseKey(code: code, flags: flags)
@@ -54,16 +57,22 @@ public protocol MouseSimulating {
 
 public final class MouseSimulator: MouseSimulating {
     private let eventSource: CGEventSource?
+    private var lastKnownPosition: CGPoint?
 
     public init() {
         eventSource = CGEventSource(stateID: .hidSystemState)
     }
 
-    public func moveMouse(dx: Double, dy: Double) throws {
-        guard let currentEvent = CGEvent(source: nil) else {
-            throw SimulationError.eventCreationFailed
+    private func getCurrentPosition() -> CGPoint {
+        let nsPos = NSEvent.mouseLocation
+        if let screen = NSScreen.main {
+            return CGPoint(x: nsPos.x, y: screen.frame.height - nsPos.y)
         }
-        let currentPos = currentEvent.location
+        return CGPoint(x: nsPos.x, y: nsPos.y)
+    }
+
+    public func moveMouse(dx: Double, dy: Double) throws {
+        let currentPos = lastKnownPosition ?? getCurrentPosition()
         let newPos = CGPoint(x: currentPos.x + dx, y: currentPos.y + dy)
 
         guard let event = CGEvent(
@@ -75,13 +84,11 @@ public final class MouseSimulator: MouseSimulating {
             throw SimulationError.eventCreationFailed
         }
         event.post(tap: .cghidEventTap)
+        lastKnownPosition = newPos
     }
 
     public func click(button: ActionConfig.MouseClickAction.MouseButton, down: Bool) throws {
-        guard let currentEvent = CGEvent(source: nil) else {
-            throw SimulationError.eventCreationFailed
-        }
-        let pos = currentEvent.location
+        let pos = lastKnownPosition ?? getCurrentPosition()
 
         let (mouseType, mouseButton): (CGEventType, CGMouseButton) = switch button {
         case .left:   (down ? .leftMouseDown : .leftMouseUp, .left)

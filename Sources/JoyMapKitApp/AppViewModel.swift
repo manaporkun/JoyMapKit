@@ -19,10 +19,13 @@ final class AppViewModel: ObservableObject {
     @Published var inputEvents: [InputEvent] = []
     @Published var showInputMonitor: Bool = false
     @Published var liveInputStates: [String: Float] = [:]
+    @Published var loadError: String?
 
     private var service: JoyMapService?
     private var controllerManager: ControllerManager?
     private var permissionTimer: Timer?
+    private var displayTimer: Timer?
+    private var inputBuffer: [String: Float] = [:]
 
     struct ControllerInfo: Identifiable {
         let id = UUID()
@@ -102,15 +105,17 @@ final class AppViewModel: ObservableObject {
     }
 
     func selectProfile(_ name: String) {
-        activeProfileName = name
+        let oldProfileName = activeProfileName
         // Restart service with the new profile
         stopService()
         do {
             let svc = try JoyMapService()
             try svc.start(profileOverride: name)
             service = svc
+            activeProfileName = name
         } catch {
             logger.error("Failed to switch profile: \(error.localizedDescription)")
+            activeProfileName = oldProfileName
         }
     }
 
@@ -122,15 +127,21 @@ final class AppViewModel: ObservableObject {
 
     private func loadProfiles() {
         let store = ProfileStore(configDirectory: ConfigManager.defaultConfigDirectory)
-        if let loaded = try? store.loadAll() {
-            profiles = loaded.map { profile in
-                ProfileInfo(
-                    id: profile.id,
-                    name: profile.name,
-                    appBundleIDs: profile.appBundleIDs,
-                    bindingCount: profile.bindings.count
-                )
-            }
+        let loaded: [Profile]
+        do {
+            loaded = try store.loadAll()
+        } catch {
+            logger.error("Failed to load profiles: \(error)")
+            self.loadError = error.localizedDescription
+            loaded = []
+        }
+        profiles = loaded.map { profile in
+            ProfileInfo(
+                id: profile.id,
+                name: profile.name,
+                appBundleIDs: profile.appBundleIDs,
+                bindingCount: profile.bindings.count
+            )
         }
     }
 
@@ -155,21 +166,35 @@ final class AppViewModel: ObservableObject {
         }
 
         manager.onInputChanged = { [weak self] _, elementName, value in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self else { return }
-                // Update live states for controller visualization
-                self.liveInputStates[elementName] = value
+                // Buffer input for 60Hz flush
+                self.inputBuffer[elementName] = value
 
                 // Feed input monitor
                 guard abs(value) > 0.01, self.showInputMonitor else { return }
                 let event = InputEvent(timestamp: Date(), elementName: elementName, value: value)
-                self.inputEvents.insert(event, at: 0)
+                self.inputEvents.append(event)
                 if self.inputEvents.count > 50 {
-                    self.inputEvents = Array(self.inputEvents.prefix(50))
+                    self.inputEvents.removeFirst(self.inputEvents.count - 50)
                 }
             }
         }
 
+        // 60Hz timer to flush buffered input to @Published property
+        displayTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard !self.inputBuffer.isEmpty else { return }
+                self.liveInputStates = self.inputBuffer
+            }
+        }
+
         manager.startMonitoring()
+    }
+
+    deinit {
+        displayTimer?.invalidate()
+        permissionTimer?.invalidate()
     }
 }

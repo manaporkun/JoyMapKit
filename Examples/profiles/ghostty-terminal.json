@@ -1,0 +1,66 @@
+{
+  "id": "00000000-0000-0000-0000-000000000003",
+  "name": "ghostty-terminal",
+  "version": 1,
+  "metadata": {
+    "author": "orkunmanap",
+    "description": "Ghostty terminal profile for Claude Code: B=Space (voice), A=Enter (accept), D-Pad Left/Right=Ctrl+Shift+Tab/Ctrl+Tab (switch tabs), D-Pad Up/Down=arrow keys"
+  },
+  "appBundleIDs": ["com.mitchellh.ghostty"],
+  "bindings": [
+    {
+      "input": { "type": "single", "element": "Button B" },
+      "action": { "type": "keyPress", "keyCode": 49, "modifiers": [], "key": "Space" }
+    },
+    {
+      "input": { "type": "single", "element": "Button A" },
+      "action": { "type": "keyPress", "keyCode": 36, "modifiers": [], "key": "Return" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Left" },
+      "action": { "type": "keyPress", "keyCode": 48, "modifiers": ["control", "shift"], "key": "Ctrl+Shift+Tab" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Right" },
+      "action": { "type": "keyPress", "keyCode": 48, "modifiers": ["control"], "key": "Ctrl+Tab" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Up" },
+      "action": { "type": "keyPress", "keyCode": 126, "modifiers": [], "key": "Up Arrow" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Down" },
+      "action": { "type": "keyPress", "keyCode": 125, "modifiers": [], "key": "Down Arrow" }
+    }
+  ],
+  "layers": [],
+  "sticks": {
+    "Left Thumbstick": {
+      "mode": "scroll",
+      "deadzone": 0.15,
+      "outerDeadzone": 0.95,
+      "responseCurve": { "type": "linear" },
+      "sensitivity": 1.0,
+      "scrollSpeed": 5.0
+    },
+    "Right Thumbstick": {
+      "mode": "mouse",
+      "deadzone": 0.10,
+      "outerDeadzone": 0.95,
+      "responseCurve": { "type": "quadratic" },
+      "sensitivity": 1.5
+    }
+  },
+  "triggers": {
+    "Left Trigger": {
+      "mode": "digital",
+      "threshold": 0.3,
+      "action": { "type": "mouseClick", "button": "right" }
+    },
+    "Right Trigger": {
+      "mode": "digital",
+      "threshold": 0.3,
+      "action": { "type": "mouseClick", "button": "left" }
+    }
+  }
+}

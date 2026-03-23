@@ -15,7 +15,10 @@ public enum ResponseCurve {
         case .cubic:     self = .cubic
         case .sCurve:    self = .sCurve
         case .custom:
-            let points = (config.customPoints ?? []).map { (x: $0[0], y: $0[1]) }
+            let points = (config.customPoints ?? []).compactMap { arr -> (x: Double, y: Double)? in
+                guard arr.count >= 2 else { return nil }
+                return (x: arr[0], y: arr[1])
+            }
             self = .custom(points: points)
         }
     }

@@ -101,31 +101,32 @@ public final class ControllerManager: ControllerManaging {
             return
         }
 
+        // Build reverse lookup dictionary once — O(n) setup, O(1) per input event
+        var elementNameTable: [ObjectIdentifier: String] = [:]
+        if let profile = handle.controller?.physicalInputProfile {
+            for (name, element) in profile.elements {
+                elementNameTable[ObjectIdentifier(element)] = name
+            }
+        }
+
         // Master handler: fires on ANY input change
         gamepad.valueChangedHandler = { [weak self, weak handle] (gamepad, element) in
             guard let self, let handle else { return }
 
-            // Find the element name by matching against the physical input profile
-            if let profile = handle.controller?.physicalInputProfile {
-                for (name, profileElement) in profile.elements {
-                    if profileElement === element {
-                        let value: Float
-                        if let button = element as? GCControllerButtonInput {
-                            value = button.value
-                        } else if let axis = element as? GCControllerAxisInput {
-                            value = axis.value
-                        } else if let dpad = element as? GCDeviceDirectionPad {
-                            // For dpads, report individual directions
-                            self.reportDpadInput(handle: handle, name: name, dpad: dpad)
-                            return
-                        } else {
-                            value = 0
-                        }
-                        self.onInputChanged?(handle, name, value)
-                        return
-                    }
-                }
+            guard let name = elementNameTable[ObjectIdentifier(element)] else { return }
+
+            let value: Float
+            if let button = element as? GCControllerButtonInput {
+                value = button.value
+            } else if let axis = element as? GCControllerAxisInput {
+                value = axis.value
+            } else if let dpad = element as? GCDeviceDirectionPad {
+                self.reportDpadInput(handle: handle, name: name, dpad: dpad)
+                return
+            } else {
+                value = 0
             }
+            self.onInputChanged?(handle, name, value)
         }
     }
 

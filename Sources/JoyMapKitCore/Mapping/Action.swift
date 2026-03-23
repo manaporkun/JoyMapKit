@@ -17,19 +17,20 @@ public enum ActionConfig: Codable, Equatable {
         public var keyCode: UInt16
         public var modifiers: [Modifier]
         public var key: String?
+        public let eventFlags: CGEventFlags
 
         public enum Modifier: String, Codable, Equatable {
             case command, option, control, shift, fn
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case keyCode, modifiers, key
         }
 
         public init(keyCode: UInt16, modifiers: [Modifier] = [], key: String? = nil) {
             self.keyCode = keyCode
             self.modifiers = modifiers
             self.key = key
-        }
-
-        /// Convert modifiers to CGEventFlags.
-        public var eventFlags: CGEventFlags {
             var flags = CGEventFlags()
             for modifier in modifiers {
                 switch modifier {
@@ -40,7 +41,26 @@ public enum ActionConfig: Codable, Equatable {
                 case .fn:       flags.insert(.maskSecondaryFn)
                 }
             }
-            return flags
+            self.eventFlags = flags
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let keyCode = try container.decode(UInt16.self, forKey: .keyCode)
+            let modifiers = try container.decode([Modifier].self, forKey: .modifiers)
+            let key = try container.decodeIfPresent(String.self, forKey: .key)
+            self.init(keyCode: keyCode, modifiers: modifiers, key: key)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(keyCode, forKey: .keyCode)
+            try container.encode(modifiers, forKey: .modifiers)
+            try container.encodeIfPresent(key, forKey: .key)
+        }
+
+        public static func == (lhs: KeyPressAction, rhs: KeyPressAction) -> Bool {
+            lhs.keyCode == rhs.keyCode && lhs.modifiers == rhs.modifiers && lhs.key == rhs.key
         }
     }
 
@@ -88,15 +108,15 @@ public enum ActionConfig: Codable, Equatable {
 
             public init(action: ActionConfig, delayMs: Int = 0, holdMs: Int? = nil) {
                 self.action = action
-                self.delayMs = delayMs
-                self.holdMs = holdMs
+                self.delayMs = min(max(delayMs, 0), 10_000)
+                self.holdMs = holdMs.map { min(max($0, 0), 10_000) }
             }
         }
 
         public init(name: String? = nil, steps: [MacroStep], repeatCount: Int = 1) {
             self.name = name
             self.steps = steps
-            self.repeatCount = repeatCount
+            self.repeatCount = min(max(repeatCount, 1), 1000)
         }
     }
 

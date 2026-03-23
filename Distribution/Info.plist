@@ -25,5 +25,7 @@
     <true/>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>JoyMapKit requires Accessibility access to simulate keyboard and mouse input from gamepad buttons.</string>
 </dict>
 </plist>

@@ -57,7 +57,7 @@ struct InputMonitorView: View {
             } else {
                 // Event table
                 List {
-                    ForEach(viewModel.inputEvents) { event in
+                    ForEach(viewModel.inputEvents.reversed()) { event in
                         InputEventRow(event: event)
                     }
                 }
@@ -76,10 +76,14 @@ struct InputMonitorView: View {
 struct InputEventRow: View {
     let event: AppViewModel.InputEvent
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+
     private var timeString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss.SSS"
-        return formatter.string(from: event.timestamp)
+        Self.timeFormatter.string(from: event.timestamp)
     }
 
     var body: some View {
