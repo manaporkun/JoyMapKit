@@ -30,6 +30,11 @@ public final class ControllerManager: ControllerManaging {
     }
 
     public func startMonitoring() {
+        guard connectObserver == nil, disconnectObserver == nil else {
+            logger.debug("Controller monitoring already active")
+            return
+        }
+
         connectObserver = NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect,
             object: nil,
@@ -72,6 +77,11 @@ public final class ControllerManager: ControllerManaging {
     // MARK: - Private
 
     private func controllerConnected(_ controller: GCController) {
+        guard !connectedControllers.contains(where: { $0.controller === controller }) else {
+            logger.debug("Ignoring duplicate controller connect event")
+            return
+        }
+
         // Enable background event monitoring after first connection
         if enableBackgroundMonitoring {
             GCController.shouldMonitorBackgroundEvents = true
