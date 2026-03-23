@@ -12,6 +12,15 @@ public final class ActionDispatcher: ActionDispatching {
     private let mouseSimulator: MouseSimulating
     private let logger = Logger(label: "com.joymapkit.dispatcher")
 
+    /// Called when a macro action is dispatched (pressed=true starts, pressed=false cancels).
+    public var onMacro: ((_ macro: ActionConfig.MacroAction, _ key: String, _ pressed: Bool) -> Void)?
+
+    /// Called when a profile switch action is dispatched.
+    public var onProfileSwitch: ((_ profileName: String) -> Void)?
+
+    /// Called when a layer toggle action is dispatched.
+    public var onLayerToggle: ((_ layerName: String) -> Void)?
+
     public init(keySimulator: KeySimulating, mouseSimulator: MouseSimulating) {
         self.keySimulator = keySimulator
         self.mouseSimulator = mouseSimulator
@@ -44,9 +53,18 @@ public final class ActionDispatcher: ActionDispatching {
                 executeShell(shellAction)
             }
 
-        case .macro, .profileSwitch, .layerToggle:
-            // Phase 4 features — no-op for now
-            logger.debug("Action type not yet implemented: \(action)")
+        case .macro(let macroAction):
+            onMacro?(macroAction, macroAction.name ?? UUID().uuidString, pressed)
+
+        case .profileSwitch(let name):
+            if pressed {
+                onProfileSwitch?(name)
+            }
+
+        case .layerToggle(let name):
+            if pressed {
+                onLayerToggle?(name)
+            }
 
         case .none:
             break

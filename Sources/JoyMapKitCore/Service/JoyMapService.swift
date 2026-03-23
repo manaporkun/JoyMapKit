@@ -11,6 +11,7 @@ public final class JoyMapService {
     private let focusedAppMonitor: FocusedAppMonitor
     private let profileResolver: ProfileResolver
     private let mappingEngine: MappingEngine
+    private let analogHandler: AnalogHandler
     private let logger = Logger(label: "com.joymapkit.service")
 
     private var config: GlobalConfig
@@ -29,7 +30,13 @@ public final class JoyMapService {
             keySimulator: keySimulator,
             mouseSimulator: mouseSimulator
         )
+        self.analogHandler = AnalogHandler(
+            mouseSimulator: mouseSimulator,
+            keySimulator: keySimulator,
+            actionDispatcher: actionDispatcher
+        )
         self.mappingEngine = MappingEngine(actionDispatcher: actionDispatcher)
+        self.mappingEngine.analogHandler = analogHandler
 
         self.config = try configManager.load()
         self.status = ServiceStatus()
@@ -52,11 +59,9 @@ public final class JoyMapService {
         // Activate initial profile
         let initialProfileName = profileOverride ?? config.profiles.defaultProfile
         if let profile = profiles.first(where: { $0.name == initialProfileName }) {
-            mappingEngine.setProfile(profile)
-            status.activeProfileName = profile.name
+            activateProfile(profile)
         } else if let fallback = profiles.first(where: { $0.appBundleIDs.contains("*") }) {
-            mappingEngine.setProfile(fallback)
-            status.activeProfileName = fallback.name
+            activateProfile(fallback)
         } else {
             logger.warning("No profile found matching '\(initialProfileName)' and no fallback profile")
         }
@@ -89,11 +94,20 @@ public final class JoyMapService {
     }
 
     public func stop() {
+        analogHandler.stop()
         mappingEngine.releaseAllHeldKeys()
         controllerManager.stopMonitoring()
         focusedAppMonitor.stopMonitoring()
         status.isRunning = false
         logger.info("JoyMapKit service stopped")
+    }
+
+    // MARK: - Profile Activation
+
+    private func activateProfile(_ profile: Profile) {
+        mappingEngine.setProfile(profile)
+        analogHandler.configure(profile: profile, globalConfig: config)
+        status.activeProfileName = profile.name
     }
 
     // MARK: - Callbacks
@@ -111,8 +125,7 @@ public final class JoyMapService {
         // Re-resolve profile with new controller
         if let app = focusedAppMonitor.currentApp,
            let profile = profileResolver.resolve(forApp: app, controller: handle) {
-            mappingEngine.setProfile(profile)
-            status.activeProfileName = profile.name
+            activateProfile(profile)
         }
     }
 
@@ -129,8 +142,7 @@ public final class JoyMapService {
 
         if let profile = profileResolver.resolve(forApp: app, controller: controller) {
             if profile.name != status.activeProfileName {
-                mappingEngine.setProfile(profile)
-                status.activeProfileName = profile.name
+                activateProfile(profile)
                 logger.info("Auto-switched to profile: \(profile.name) for \(app)")
             }
         }

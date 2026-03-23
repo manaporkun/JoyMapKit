@@ -1,0 +1,98 @@
+{
+  "id": "00000000-0000-0000-0000-000000000002",
+  "name": "claude-code",
+  "version": 1,
+  "metadata": {
+    "author": "JoyMapKit",
+    "description": "Claude Code / terminal workflow profile. Right stick controls mouse, left stick scrolls, triggers click, face buttons for common shortcuts."
+  },
+  "appBundleIDs": ["*"],
+  "bindings": [
+    {
+      "input": { "type": "single", "element": "Button A" },
+      "action": { "type": "keyPress", "keyCode": 36, "modifiers": [], "key": "Return" }
+    },
+    {
+      "input": { "type": "single", "element": "Button B" },
+      "action": { "type": "keyPress", "keyCode": 53, "modifiers": [], "key": "Escape" }
+    },
+    {
+      "input": { "type": "single", "element": "Button X" },
+      "action": { "type": "keyPress", "keyCode": 49, "modifiers": [], "key": "Space" }
+    },
+    {
+      "input": { "type": "single", "element": "Button Y" },
+      "action": { "type": "keyPress", "keyCode": 48, "modifiers": [], "key": "Tab" }
+    },
+    {
+      "input": { "type": "single", "element": "Left Shoulder" },
+      "action": { "type": "keyPress", "keyCode": 6, "modifiers": ["command"], "key": "Cmd+Z" }
+    },
+    {
+      "input": { "type": "single", "element": "Right Shoulder" },
+      "action": { "type": "keyPress", "keyCode": 6, "modifiers": ["command", "shift"], "key": "Cmd+Shift+Z" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Up" },
+      "action": { "type": "keyPress", "keyCode": 126, "modifiers": [], "key": "Up Arrow" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Down" },
+      "action": { "type": "keyPress", "keyCode": 125, "modifiers": [], "key": "Down Arrow" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Left" },
+      "action": { "type": "keyPress", "keyCode": 123, "modifiers": ["command"], "key": "Cmd+Left Arrow" }
+    },
+    {
+      "input": { "type": "single", "element": "Direction Pad Right" },
+      "action": { "type": "keyPress", "keyCode": 124, "modifiers": ["command"], "key": "Cmd+Right Arrow" }
+    },
+    {
+      "input": { "type": "single", "element": "Button Menu" },
+      "action": { "type": "keyPress", "keyCode": 40, "modifiers": ["command"], "key": "Cmd+K" }
+    },
+    {
+      "input": { "type": "single", "element": "Button Options" },
+      "action": { "type": "keyPress", "keyCode": 35, "modifiers": ["command"], "key": "Cmd+P" }
+    },
+    {
+      "input": { "type": "single", "element": "Left Thumbstick Button" },
+      "action": { "type": "keyPress", "keyCode": 8, "modifiers": ["command"], "key": "Cmd+C" }
+    },
+    {
+      "input": { "type": "single", "element": "Right Thumbstick Button" },
+      "action": { "type": "keyPress", "keyCode": 9, "modifiers": ["command"], "key": "Cmd+V" }
+    }
+  ],
+  "layers": [],
+  "sticks": {
+    "Left Thumbstick": {
+      "mode": "scroll",
+      "deadzone": 0.15,
+      "outerDeadzone": 0.95,
+      "responseCurve": { "type": "linear" },
+      "sensitivity": 1.0,
+      "scrollSpeed": 5.0
+    },
+    "Right Thumbstick": {
+      "mode": "mouse",
+      "deadzone": 0.10,
+      "outerDeadzone": 0.95,
+      "responseCurve": { "type": "quadratic" },
+      "sensitivity": 1.5
+    }
+  },
+  "triggers": {
+    "Left Trigger": {
+      "mode": "digital",
+      "threshold": 0.3,
+      "action": { "type": "mouseClick", "button": "right" }
+    },
+    "Right Trigger": {
+      "mode": "digital",
+      "threshold": 0.3,
+      "action": { "type": "mouseClick", "button": "left" }
+    }
+  }
+}

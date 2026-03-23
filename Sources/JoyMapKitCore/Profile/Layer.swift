@@ -1,9 +1,7 @@
 import Foundation
 
-/// A modifier-activated binding overlay. When a layer's activator is held,
-/// its bindings take priority over the base profile bindings.
-/// Phase 4 implementation — the LayerConfig model is in Profile.swift.
-/// This file will hold runtime layer state management.
+/// Manages runtime layer activation state. When a layer is active, its bindings
+/// take priority over the base profile bindings. LayerConfig is defined in Profile.swift.
 public final class LayerManager {
     private var activeLayers: Set<String> = []
 

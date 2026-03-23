@@ -9,6 +9,7 @@ let package = Package(
     products: [
         .library(name: "JoyMapKitCore", targets: ["JoyMapKitCore"]),
         .executable(name: "joymapkit", targets: ["joymapkit"]),
+        .executable(name: "JoyMapKitApp", targets: ["JoyMapKitApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
@@ -32,6 +33,15 @@ let package = Package(
             dependencies: [
                 "JoyMapKitCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .executableTarget(
+            name: "JoyMapKitApp",
+            dependencies: [
+                "JoyMapKitCore",
+            ],
+            linkerSettings: [
+                .linkedFramework("SwiftUI"),
             ]
         ),
         .testTarget(

@@ -1,11 +1,13 @@
 import ArgumentParser
+import Foundation
+import JoyMapKitCore
 
 @main
-struct JoyMapKitCLI: AsyncParsableCommand {
+struct JoyMapKitCLI: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "joymapkit",
         abstract: "Gamepad-to-keyboard/mouse mapper for macOS",
-        version: "0.1.0",
+        version: JoyMapKitVersion.current,
         subcommands: [
             RunCommand.self,
             TestCommand.self,

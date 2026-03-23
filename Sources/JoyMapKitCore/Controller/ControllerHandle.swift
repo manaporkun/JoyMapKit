@@ -34,6 +34,16 @@ public final class ControllerHandle: Identifiable, Hashable {
         self.availableElements = Array(controller.physicalInputProfile.elements.keys).sorted()
     }
 
+    /// Creates a handle without a real GCController, for testing only.
+    internal init(vendorName: String, controllerType: ControllerType) {
+        self.id = UUID()
+        self.vendorName = vendorName
+        self.productCategory = "test"
+        self.controllerType = controllerType
+        self.controller = nil
+        self.availableElements = []
+    }
+
     /// Rebind to a new GCController instance (e.g., after reconnect).
     public func rebind(to controller: GCController) {
         self.controller = controller

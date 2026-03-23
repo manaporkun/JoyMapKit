@@ -3,7 +3,7 @@ import Foundation
 import JoyMapKitCore
 import GameController
 
-struct TestCommand: AsyncParsableCommand {
+struct TestCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test",
         abstract: "Live input monitor — shows all controller events in real-time"
@@ -12,7 +12,7 @@ struct TestCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Show raw analog values without filtering")
     var raw: Bool = false
 
-    func run() async throws {
+    func run() throws {
         print("JoyMapKit Input Monitor")
         print("Press Ctrl+C to exit.\n")
         print("Waiting for controller...")
@@ -21,7 +21,7 @@ struct TestCommand: AsyncParsableCommand {
         let threshold: Float = raw ? 0.0 : 0.01
 
         manager.onControllerConnected = { handle in
-            print("\n✓ Connected: \(handle.vendorName) (\(handle.controllerType.rawValue))")
+            print("\n Connected: \(handle.vendorName) (\(handle.controllerType.rawValue))")
             print("  Elements: \(handle.availableElements.count)")
             print("  Available inputs:")
             for element in handle.availableElements {
@@ -31,17 +31,18 @@ struct TestCommand: AsyncParsableCommand {
         }
 
         manager.onControllerDisconnected = { handle in
-            print("\n✗ Disconnected: \(handle.vendorName)\n")
+            print("\n Disconnected: \(handle.vendorName)\n")
         }
 
-        manager.onInputChanged = { handle, elementName, value in
+        manager.onInputChanged = { _, elementName, value in
             guard abs(value) > threshold else { return }
 
             let timestamp = DateFormatter.localizedString(
                 from: Date(), dateStyle: .none, timeStyle: .medium
             )
-            let bar = String(repeating: "█", count: Int(abs(value) * 20))
-            let padding = String(repeating: "░", count: 20 - Int(abs(value) * 20))
+            let barLen = Int(abs(value) * 20)
+            let bar = String(repeating: "#", count: min(barLen, 20))
+            let padding = String(repeating: ".", count: max(20 - barLen, 0))
             print("[\(timestamp)] \(elementName.padding(toLength: 30, withPad: " ", startingAt: 0)) \(String(format: "%+.3f", value)) [\(bar)\(padding)]")
         }
 
@@ -57,9 +58,7 @@ struct TestCommand: AsyncParsableCommand {
 
         manager.startMonitoring()
 
-        // Keep alive using async-compatible approach
-        while true {
-            try await Task.sleep(nanoseconds: 1_000_000_000)
-        }
+        // Run the main RunLoop — required for GameController notifications
+        RunLoop.main.run()
     }
 }

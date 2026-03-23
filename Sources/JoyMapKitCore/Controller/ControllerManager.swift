@@ -130,9 +130,14 @@ public final class ControllerManager: ControllerManaging {
     }
 
     private func reportDpadInput(handle: ControllerHandle, name: String, dpad: GCDeviceDirectionPad) {
+        // Report directional buttons (for digital bindings)
         onInputChanged?(handle, "\(name) Up", dpad.up.value)
         onInputChanged?(handle, "\(name) Down", dpad.down.value)
         onInputChanged?(handle, "\(name) Left", dpad.left.value)
         onInputChanged?(handle, "\(name) Right", dpad.right.value)
+
+        // Report raw axes (for analog stick processing)
+        onInputChanged?(handle, "\(name) X Axis", dpad.xAxis.value)
+        onInputChanged?(handle, "\(name) Y Axis", dpad.yAxis.value)
     }
 }

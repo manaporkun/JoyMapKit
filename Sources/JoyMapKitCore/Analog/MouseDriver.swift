@@ -1,7 +1,7 @@
 import Foundation
+import Logging
 
 /// Converts processed stick output to mouse movement at a fixed tick rate.
-/// Phase 2 implementation — placeholder for now.
 public final class MouseDriver {
     public var maxSpeed: Double = 1500.0
     public var sensitivity: Double = 1.0
@@ -10,6 +10,7 @@ public final class MouseDriver {
     private var currentX: Double = 0
     private var currentY: Double = 0
     private let mouseSimulator: MouseSimulating
+    private let logger = Logger(label: "com.joymapkit.mouse")
 
     public init(mouseSimulator: MouseSimulating) {
         self.mouseSimulator = mouseSimulator
@@ -40,6 +41,7 @@ public final class MouseDriver {
         let dx = currentX * maxSpeed * sensitivity * interval
         let dy = -currentY * maxSpeed * sensitivity * interval  // Invert Y for screen coords
 
-        try? mouseSimulator.moveMouse(dx: dx, dy: dy)
+        do { try mouseSimulator.moveMouse(dx: dx, dy: dy) }
+        catch { logger.error("Mouse move failed: \(error)") }
     }
 }
