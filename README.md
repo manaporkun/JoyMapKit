@@ -28,21 +28,13 @@ Swift Package. Requires macOS 13+.
 
 ## Installation
 
-### Homebrew
-
-```
-brew install manaporkun/tap/joymapkit
-```
-
-### Build from Source
-
 ```
 git clone https://github.com/manaporkun/JoyMapKit.git
 cd JoyMapKit
 swift build -c release
 ```
 
-The built binary is at `.build/release/joymapkit`.
+The CLI binary is at `.build/release/joymapkit`. The GUI app is at `.build/release/JoyMapKitApp`.
 
 ## Quick Start
 
