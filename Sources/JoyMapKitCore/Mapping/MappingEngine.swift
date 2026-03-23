@@ -22,6 +22,20 @@ public final class MappingEngine {
     /// Pre-indexed per-layer bindings for O(1) lookup.
     private var layerBindingIndices: [String: [String: BindingConfig]] = [:]
 
+    // MARK: - Turbo State
+
+    /// Elements with turbo toggled on (rapid-fire when held).
+    private var turboElements: Set<String> = []
+    /// Whether the turbo modifier button is currently held.
+    private var turboButtonHeld: Bool = false
+    /// Timers for turbo rapid-fire, keyed by element name.
+    private var turboTimers: [String: Timer] = [:]
+    /// The turbo rate for the active profile (milliseconds between fires).
+    private var turboRateMs: Int = 80
+
+    /// Called when turbo state changes (for UI feedback).
+    public var onTurboChanged: ((_ turboElements: Set<String>) -> Void)?
+
     /// Handles analog stick and trigger inputs. Set by JoyMapService.
     public var analogHandler: AnalogHandler?
 
@@ -65,6 +79,7 @@ public final class MappingEngine {
         chordDetector.reset()
         layerManager.deactivateAll()
         invalidateAllWhileHeldTimers()
+        clearTurboState()
 
         activeProfile = profile
 
@@ -93,6 +108,7 @@ public final class MappingEngine {
                 allBindings.append(contentsOf: layer.bindings)
             }
             chordDetector.configure(bindings: allBindings)
+            turboRateMs = profile.turboRateMs ?? 80
             logger.info("Profile activated: \(profile.name)")
         } else {
             bindingIndex = [:]
@@ -111,8 +127,26 @@ public final class MappingEngine {
 
         let pressed = value > 0.1
 
-        // 2. Handle layer activators
+        // 2. Handle turbo modifier button
+        if let turboButton = profile.turboButton, elementName == turboButton {
+            turboButtonHeld = pressed
+            return
+        }
+
+        // 3. If turbo modifier is held, toggle turbo on this element instead of dispatching
+        if turboButtonHeld && pressed {
+            toggleTurbo(for: elementName)
+            return
+        }
+
+        // 4. Handle layer activators
         if handleLayerActivator(elementName: elementName, pressed: pressed, in: profile) {
+            return
+        }
+
+        // 5. Handle turbo-active elements (rapid-fire on hold)
+        if turboElements.contains(elementName) {
+            handleTurboInput(elementName: elementName, pressed: pressed, in: profile)
             return
         }
 
@@ -136,6 +170,8 @@ public final class MappingEngine {
         activeChordActions.removeAll()
 
         invalidateAllWhileHeldTimers()
+        for (_, timer) in turboTimers { timer.invalidate() }
+        turboTimers.removeAll()
     }
 
     // MARK: - Private — Press/Release Flow
@@ -310,6 +346,55 @@ public final class MappingEngine {
 
         // Fall back to base bindings
         return bindingIndex[elementName]
+    }
+
+    // MARK: - Private — Turbo
+
+    private func toggleTurbo(for elementName: String) {
+        if turboElements.contains(elementName) {
+            turboElements.remove(elementName)
+            invalidateTurboTimer(for: elementName)
+            logger.info("Turbo OFF: \(elementName)")
+        } else {
+            turboElements.insert(elementName)
+            logger.info("Turbo ON: \(elementName)")
+        }
+        onTurboChanged?(turboElements)
+    }
+
+    private func handleTurboInput(elementName: String, pressed: Bool, in profile: Profile) {
+        if pressed {
+            guard let binding = resolveBinding(for: elementName, in: profile) else { return }
+            // Start rapid-fire: immediate first press, then repeat at turbo rate
+            dispatch(binding.action, pressed: true)
+            heldBindings[elementName] = binding.action
+
+            let interval = Double(max(turboRateMs, 10)) / 1000.0
+            turboTimers[elementName]?.invalidate()
+            turboTimers[elementName] = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+                self?.dispatch(binding.action, pressed: false)
+                self?.dispatch(binding.action, pressed: true)
+            }
+        } else {
+            // Release
+            if let action = heldBindings.removeValue(forKey: elementName) {
+                dispatch(action, pressed: false)
+            }
+            invalidateTurboTimer(for: elementName)
+        }
+    }
+
+    private func invalidateTurboTimer(for elementName: String) {
+        turboTimers[elementName]?.invalidate()
+        turboTimers.removeValue(forKey: elementName)
+    }
+
+    private func clearTurboState() {
+        turboElements.removeAll()
+        turboButtonHeld = false
+        for (_, timer) in turboTimers { timer.invalidate() }
+        turboTimers.removeAll()
+        onTurboChanged?(turboElements)
     }
 
     private func dispatch(_ action: ActionConfig, pressed: Bool) {
