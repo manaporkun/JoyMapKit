@@ -13,16 +13,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build universal binary
+      - name: Build app
         run: |
-          swift build -c release --arch arm64 --arch x86_64
-          BINARY=".build/apple/Products/Release/joymapkit"
-          strip "$BINARY"
+          swift build -c release
           VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE="joymapkit-${VERSION}-macos-universal.tar.gz"
-          tar -czf "$ARCHIVE" -C "$(dirname "$BINARY")" "$(basename "$BINARY")"
+
+          # Create .app bundle
+          APP_DIR="JoyMapKit.app/Contents"
+          mkdir -p "$APP_DIR/MacOS" "$APP_DIR/Resources"
+          cp .build/release/JoyMapKitApp "$APP_DIR/MacOS/JoyMapKit"
+          cp Distribution/Info.plist "$APP_DIR/"
+          if [ -f Distribution/AppIcon.icns ]; then
+            cp Distribution/AppIcon.icns "$APP_DIR/Resources/"
+          fi
+          strip "$APP_DIR/MacOS/JoyMapKit"
+
+          # Zip the .app
+          ARCHIVE="JoyMapKit-${VERSION}.zip"
+          ditto -c -k --keepParent JoyMapKit.app "$ARCHIVE"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

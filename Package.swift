@@ -8,11 +8,9 @@ let package = Package(
     ],
     products: [
         .library(name: "JoyMapKitCore", targets: ["JoyMapKitCore"]),
-        .executable(name: "joymapkit", targets: ["joymapkit"]),
         .executable(name: "JoyMapKitApp", targets: ["JoyMapKitApp"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     ],
     targets: [
@@ -26,13 +24,6 @@ let package = Package(
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AppKit"),
-            ]
-        ),
-        .executableTarget(
-            name: "joymapkit",
-            dependencies: [
-                "JoyMapKitCore",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .executableTarget(
