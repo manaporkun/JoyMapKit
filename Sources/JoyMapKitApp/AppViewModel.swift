@@ -16,6 +16,7 @@ final class AppViewModel: ObservableObject {
     @Published var profiles: [ProfileInfo] = []
     @Published var focusedApp: String = "None"
     @Published var accessibilityGranted: Bool = false
+    @Published var accessibilityBannerDismissed: Bool = false
     @Published var inputEvents: [InputEvent] = []
     @Published var showInputMonitor: Bool = false
     @Published var liveInputStates: [String: Float] = [:]
@@ -50,6 +51,7 @@ final class AppViewModel: ObservableObject {
 
     init() {
         accessibilityGranted = PermissionChecker.isAccessibilityGranted()
+        installDefaultProfilesIfNeeded()
         loadProfiles()
         startControllerMonitoring()
         startAccessibilityPolling()
@@ -99,6 +101,8 @@ final class AppViewModel: ObservableObject {
                 let granted = PermissionChecker.isAccessibilityGranted()
                 if granted != self.accessibilityGranted {
                     self.accessibilityGranted = granted
+                    // Re-show banner if permission was revoked
+                    if !granted { self.accessibilityBannerDismissed = false }
                 }
             }
         }
@@ -124,6 +128,46 @@ final class AppViewModel: ObservableObject {
     }
 
     // MARK: - Private
+
+    private func installDefaultProfilesIfNeeded() {
+        let configDir = ConfigManager.defaultConfigDirectory
+        let profilesDir = configDir.appendingPathComponent("profiles")
+        let fm = FileManager.default
+
+        // Only install if the profiles directory doesn't exist or is empty
+        if fm.fileExists(atPath: profilesDir.path) {
+            let contents = (try? fm.contentsOfDirectory(atPath: profilesDir.path)) ?? []
+            if !contents.filter({ $0.hasSuffix(".json") }).isEmpty { return }
+        }
+
+        // Create a default profile
+        let store = ProfileStore(configDirectory: configDir)
+        let defaultProfile = Profile(
+            name: "default",
+            metadata: ProfileMetadata(author: "JoyMapKit", description: "Default profile with common desktop navigation mappings"),
+            appBundleIDs: ["*"],
+            bindings: [
+                BindingConfig(input: .single("Button A"), action: .keyPress(.init(keyCode: 36, key: "Return"))),
+                BindingConfig(input: .single("Button B"), action: .keyPress(.init(keyCode: 53, key: "Escape"))),
+                BindingConfig(input: .single("Button X"), action: .keyPress(.init(keyCode: 49, key: "Space"))),
+                BindingConfig(input: .single("Button Y"), action: .keyPress(.init(keyCode: 48, key: "Tab"))),
+                BindingConfig(input: .single("Direction Pad Up"), action: .keyPress(.init(keyCode: 126, key: "Up Arrow"))),
+                BindingConfig(input: .single("Direction Pad Down"), action: .keyPress(.init(keyCode: 125, key: "Down Arrow"))),
+                BindingConfig(input: .single("Direction Pad Left"), action: .keyPress(.init(keyCode: 123, key: "Left Arrow"))),
+                BindingConfig(input: .single("Direction Pad Right"), action: .keyPress(.init(keyCode: 124, key: "Right Arrow"))),
+            ],
+            sticks: [
+                "Left Thumbstick": StickConfig(mode: .scroll, scrollSpeed: 5.0),
+                "Right Thumbstick": StickConfig(mode: .mouse, deadzone: 0.10, responseCurve: ResponseCurveConfig(type: .quadratic), sensitivity: 1.5),
+            ],
+            triggers: [
+                "Left Trigger": TriggerConfig(mode: .digital, action: .mouseClick(.init(button: .right))),
+                "Right Trigger": TriggerConfig(mode: .digital, action: .mouseClick(.init(button: .left))),
+            ]
+        )
+        try? store.save(defaultProfile)
+        logger.info("Installed default profile")
+    }
 
     private func loadProfiles() {
         let store = ProfileStore(configDirectory: ConfigManager.defaultConfigDirectory)

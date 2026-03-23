@@ -97,8 +97,8 @@ struct MenuBarView: View {
 
             Divider().opacity(0.5)
 
-            // Accessibility warning
-            if !viewModel.accessibilityGranted {
+            // Accessibility warning (dismissible, re-shown if status changes)
+            if !viewModel.accessibilityGranted && !viewModel.accessibilityBannerDismissed {
                 accessibilityBanner
                 Divider().opacity(0.5)
             }
@@ -228,30 +228,38 @@ struct MenuBarView: View {
     }
 
     private var accessibilityBanner: some View {
-        Button(action: { viewModel.requestAccessibility() }) {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.title3)
+        HStack(spacing: 10) {
+            Button(action: { viewModel.requestAccessibility() }) {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.title3)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Accessibility Required")
-                        .font(.callout.weight(.medium))
-                    Text("Click to grant permission")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Accessibility Required")
+                            .font(.callout.weight(.medium))
+                        Text("Click to grant permission")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right.circle.fill")
+                        .foregroundStyle(.blue)
                 }
-
-                Spacer()
-
-                Image(systemName: "arrow.right.circle.fill")
-                    .foregroundStyle(.blue)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.orange.opacity(0.05))
+            .buttonStyle(.plain)
+
+            Button(action: { viewModel.accessibilityBannerDismissed = true }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.orange.opacity(0.05))
     }
 
     private func menuAction(icon: String, label: String, color: Color, action: @escaping () -> Void) -> some View {
