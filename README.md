@@ -25,7 +25,13 @@ Requires macOS 13+.
 
 ## Installation
 
-Download `JoyMapKit.zip` from the [latest release](https://github.com/manaporkun/JoyMapKit/releases/latest), unzip, and drag `JoyMapKit.app` to your Applications folder.
+Download **[JoyMapKit.dmg](https://github.com/manaporkun/JoyMapKit/releases/latest/download/JoyMapKit-0.2.0.dmg)**, open it, and drag JoyMapKit to Applications.
+
+Or install from the terminal:
+
+```
+curl -sL https://github.com/manaporkun/JoyMapKit/releases/latest/download/JoyMapKit-0.2.0.dmg -o /tmp/JoyMapKit.dmg && hdiutil attach /tmp/JoyMapKit.dmg -quiet && cp -R "/Volumes/JoyMapKit/JoyMapKit.app" /Applications/ && hdiutil detach "/Volumes/JoyMapKit" -quiet && rm /tmp/JoyMapKit.dmg && open /Applications/JoyMapKit.app
+```
 
 ### Build from Source
 
@@ -33,7 +39,6 @@ Download `JoyMapKit.zip` from the [latest release](https://github.com/manaporkun
 git clone https://github.com/manaporkun/JoyMapKit.git
 cd JoyMapKit
 swift build -c release
-cp -r JoyMapKit.app /Applications/
 ```
 
 ## Quick Start

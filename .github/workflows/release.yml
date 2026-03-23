@@ -28,13 +28,20 @@ jobs:
           fi
           strip "$APP_DIR/MacOS/JoyMapKit"
 
-          # Zip the .app
-          ARCHIVE="JoyMapKit-${VERSION}.zip"
-          ditto -c -k --keepParent JoyMapKit.app "$ARCHIVE"
-          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          # Create DMG with drag-to-Applications
+          DMG_DIR="/tmp/dmg-staging"
+          mkdir -p "$DMG_DIR"
+          cp -R JoyMapKit.app "$DMG_DIR/"
+          ln -s /Applications "$DMG_DIR/Applications"
+          hdiutil create -volname "JoyMapKit" \
+            -srcfolder "$DMG_DIR" \
+            -ov -format UDZO \
+            "JoyMapKit-${VERSION}.dmg"
+
+          echo "DMG=JoyMapKit-${VERSION}.dmg" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARCHIVE }}
+          files: ${{ env.DMG }}
           generate_release_notes: true
