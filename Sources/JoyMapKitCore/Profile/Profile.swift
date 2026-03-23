@@ -12,6 +12,8 @@ public struct Profile: Codable, Identifiable, Equatable {
     public var layers: [LayerConfig]
     public var sticks: [String: StickConfig]
     public var triggers: [String: TriggerConfig]
+    public var turboButton: String?
+    public var turboRateMs: Int?
 
     public init(
         id: UUID = UUID(),
@@ -23,7 +25,9 @@ public struct Profile: Codable, Identifiable, Equatable {
         bindings: [BindingConfig] = [],
         layers: [LayerConfig] = [],
         sticks: [String: StickConfig] = [:],
-        triggers: [String: TriggerConfig] = [:]
+        triggers: [String: TriggerConfig] = [:],
+        turboButton: String? = nil,
+        turboRateMs: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -35,6 +39,8 @@ public struct Profile: Codable, Identifiable, Equatable {
         self.layers = layers
         self.sticks = sticks
         self.triggers = triggers
+        self.turboButton = turboButton
+        self.turboRateMs = turboRateMs
     }
 }
 

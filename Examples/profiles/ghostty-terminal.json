@@ -51,6 +51,8 @@
       "sensitivity": 1.5
     }
   },
+  "turboButton": "Button Menu",
+  "turboRateMs": 80,
   "triggers": {
     "Left Trigger": {
       "mode": "digital",
