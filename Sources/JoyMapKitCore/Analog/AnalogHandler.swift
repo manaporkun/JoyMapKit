@@ -123,9 +123,6 @@ public final class AnalogHandler {
         tickTimer?.invalidate()
         tickTimer = nil
 
-        for (_, driver) in mouseDrivers {
-            driver.stop()
-        }
         mouseDrivers.removeAll()
 
         releaseAllDirectionKeys()
@@ -172,13 +169,12 @@ public final class AnalogHandler {
             let driver = MouseDriver(mouseSimulator: mouseSimulator)
             driver.sensitivity = stickState.config.sensitivity
             driver.maxSpeed = globalMouseConfig.maxSpeed * globalMouseConfig.globalSensitivity
-            driver.start(tickRate: tickRate)
+            driver.configure(tickRate: tickRate)
             mouseDrivers[stickName] = driver
         }
 
-        // One tick timer for scroll / wasd / arrow modes
-        let needsTick = sticks.values.contains { $0.config.mode == .scroll || $0.config.mode == .wasd || $0.config.mode == .arrows }
-        if needsTick {
+        // Single unified tick timer for ALL active sticks (mouse, scroll, wasd, arrows)
+        if !sticks.isEmpty {
             tickTimer = Timer.scheduledTimer(withTimeInterval: tickInterval, repeats: true) { [weak self] _ in
                 self?.tick()
             }
@@ -191,8 +187,8 @@ public final class AnalogHandler {
 
             switch stickState.config.mode {
             case .mouse:
-                // Feed processed values to MouseDriver (it has its own timer for movement)
                 mouseDrivers[stickName]?.updateInput(x: processed.x, y: processed.y)
+                mouseDrivers[stickName]?.tick()
 
             case .scroll:
                 guard abs(processed.x) > 0.001 || abs(processed.y) > 0.001 else { continue }

@@ -2,7 +2,7 @@ import Foundation
 import Logging
 
 /// Manages loading and saving of global configuration.
-public final class ConfigManager: Sendable {
+public final class ConfigManager {
     private let configDirectory: URL
     private let logger = Logger(label: "com.joymapkit.config")
 
@@ -48,8 +48,12 @@ public final class ConfigManager: Sendable {
     }
 
     public static var defaultConfigDirectory: URL {
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
         if let xdg = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"] {
-            return URL(fileURLWithPath: xdg).appendingPathComponent("joymapkit")
+            let xdgPath = URL(fileURLWithPath: xdg).standardizedFileURL.path
+            if xdgPath.hasPrefix(homeDir) {
+                return URL(fileURLWithPath: xdg).appendingPathComponent("joymapkit")
+            }
         }
         return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/joymapkit")

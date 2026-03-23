@@ -3,9 +3,11 @@ import Foundation
 /// Processes raw analog stick input through deadzone, response curve, and sensitivity.
 public struct StickProcessor {
     public var config: StickConfig
+    private let curve: ResponseCurve
 
     public init(config: StickConfig) {
         self.config = config
+        self.curve = ResponseCurve(from: config.responseCurve)
     }
 
     /// Process raw stick input values.
@@ -33,7 +35,6 @@ public struct StickProcessor {
         let normalized = (effectiveMagnitude - config.deadzone) / range
 
         // 4. Apply response curve
-        let curve = ResponseCurve(from: config.responseCurve)
         let curved = curve.apply(normalized)
 
         // 5. Apply sensitivity and reconstruct directional vector

@@ -1,6 +1,17 @@
 import Foundation
 import Logging
 
+public enum ProfileStoreError: Error, LocalizedError {
+    case invalidProfileName(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidProfileName(let name):
+            return "Invalid profile name: '\(name)'"
+        }
+    }
+}
+
 /// Manages loading and saving of mapping profiles from disk.
 public final class ProfileStore {
     private let profilesDirectory: URL
@@ -31,11 +42,17 @@ public final class ProfileStore {
     }
 
     public func load(name: String) throws -> Profile {
-        let url = profilesDirectory.appendingPathComponent("\(name).json")
+        guard let url = sanitizedProfileURL(for: name) else {
+            throw ProfileStoreError.invalidProfileName(name)
+        }
         return try load(from: url)
     }
 
     public func save(_ profile: Profile) throws {
+        guard let url = sanitizedProfileURL(for: profile.name) else {
+            throw ProfileStoreError.invalidProfileName(profile.name)
+        }
+
         try FileManager.default.createDirectory(
             at: profilesDirectory,
             withIntermediateDirectories: true
@@ -46,23 +63,38 @@ public final class ProfileStore {
         encoder.dateEncodingStrategy = .iso8601
 
         let data = try encoder.encode(profile)
-        let url = profilesDirectory.appendingPathComponent("\(profile.name).json")
         try data.write(to: url, options: .atomic)
         logger.info("Saved profile: \(profile.name)")
     }
 
     public func delete(name: String) throws {
-        let url = profilesDirectory.appendingPathComponent("\(name).json")
+        guard let url = sanitizedProfileURL(for: name) else {
+            throw ProfileStoreError.invalidProfileName(name)
+        }
         try FileManager.default.removeItem(at: url)
         logger.info("Deleted profile: \(name)")
     }
 
     public func exists(name: String) -> Bool {
-        let url = profilesDirectory.appendingPathComponent("\(name).json")
+        guard let url = sanitizedProfileURL(for: name) else {
+            return false
+        }
         return FileManager.default.fileExists(atPath: url.path)
     }
 
     // MARK: - Private
+
+    private func sanitizedProfileURL(for name: String) -> URL? {
+        let sanitized = name.replacingOccurrences(of: "/", with: "")
+            .replacingOccurrences(of: "\\", with: "")
+            .replacingOccurrences(of: "..", with: "")
+            .replacingOccurrences(of: "\0", with: "")
+        guard !sanitized.isEmpty else { return nil }
+        let url = profilesDirectory.appendingPathComponent("\(sanitized).json")
+        let resolved = url.standardizedFileURL.path
+        guard resolved.hasPrefix(profilesDirectory.standardizedFileURL.path) else { return nil }
+        return url
+    }
 
     private func load(from url: URL) throws -> Profile {
         let data = try Data(contentsOf: url)

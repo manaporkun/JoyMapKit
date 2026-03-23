@@ -2,6 +2,7 @@ import Foundation
 import Logging
 
 /// Executes sequential macro actions with delays and support for cancellation and repeat.
+/// - Important: All methods must be called from the main thread to avoid data races on `runningTasks`.
 public final class MacroRunner {
     private let actionDispatcher: ActionDispatching
     private let logger = Logger(label: "com.joymapkit.macro")
@@ -23,7 +24,7 @@ public final class MacroRunner {
         let dispatcher = actionDispatcher
         let logger = self.logger
 
-        runningTasks[key] = Task { [weak self] in
+        runningTasks[key] = Task { @MainActor [weak self] in
             do {
                 for _ in 0..<max(macro.repeatCount, 1) {
                     try Task.checkCancellation()
@@ -50,10 +51,7 @@ public final class MacroRunner {
                 logger.error("Macro '\(macro.name ?? key)' failed: \(error)")
             }
 
-            // Clean up self-reference
-            _ = await MainActor.run { [weak self] in
-                self?.runningTasks.removeValue(forKey: key)
-            }
+            self?.runningTasks.removeValue(forKey: key)
         }
     }
 

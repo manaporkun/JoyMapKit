@@ -4,6 +4,9 @@ import Logging
 /// Protocol for dispatching output actions, enabling testability.
 public protocol ActionDispatching {
     func dispatch(_ action: ActionConfig, pressed: Bool) throws
+    var onMacro: ((_ macro: ActionConfig.MacroAction, _ key: String, _ pressed: Bool) -> Void)? { get set }
+    var onProfileSwitch: ((_ profileName: String) -> Void)? { get set }
+    var onLayerToggle: ((_ layerName: String) -> Void)? { get set }
 }
 
 /// Executes output actions by delegating to appropriate simulators.
@@ -72,9 +75,25 @@ public final class ActionDispatcher: ActionDispatching {
     }
 
     private func executeShell(_ action: ActionConfig.ShellAction) {
+        let command = action.command
+        guard command.hasPrefix("/") else {
+            logger.error("Shell action rejected: command must be an absolute path, got '\(command)'")
+            return
+        }
+        guard !command.contains("..") else {
+            logger.error("Shell action rejected: command path contains '..': '\(command)'")
+            return
+        }
+        guard FileManager.default.fileExists(atPath: command) else {
+            logger.error("Shell action rejected: executable not found at '\(command)'")
+            return
+        }
+
+        logger.warning("Executing shell action: \(command) \(action.arguments)")
+
         DispatchQueue.global(qos: .utility).async { [logger] in
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: action.command)
+            process.executableURL = URL(fileURLWithPath: command)
             process.arguments = action.arguments
             do {
                 try process.run()

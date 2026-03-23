@@ -3,6 +3,9 @@ import XCTest
 
 final class MockActionDispatcher: ActionDispatching {
     var dispatchedActions: [(action: ActionConfig, pressed: Bool)] = []
+    var onMacro: ((_ macro: ActionConfig.MacroAction, _ key: String, _ pressed: Bool) -> Void)?
+    var onProfileSwitch: ((_ profileName: String) -> Void)?
+    var onLayerToggle: ((_ layerName: String) -> Void)?
 
     func dispatch(_ action: ActionConfig, pressed: Bool) throws {
         dispatchedActions.append((action: action, pressed: pressed))

@@ -32,8 +32,8 @@ public final class ChordDetector {
     /// Currently-pressed elements that are chord participants.
     private var pressedChordElements: Set<String> = []
 
-    /// Pending deferred single presses (in order of arrival).
-    private var pendingPresses: [String] = []
+    /// Pending deferred single presses.
+    private var pendingPresses = Set<String>()
 
     private var windowTimer: Timer?
     private let logger = Logger(label: "com.joymapkit.chord")
@@ -66,9 +66,7 @@ public final class ChordDetector {
         }
 
         pressedChordElements.insert(elementName)
-        if !pendingPresses.contains(elementName) {
-            pendingPresses.append(elementName)
-        }
+        pendingPresses.insert(elementName)
 
         // Check if current pressed set exactly matches any chord
         let pressedSorted = pressedChordElements.sorted()
@@ -96,7 +94,7 @@ public final class ChordDetector {
         pressedChordElements.remove(elementName)
     }
 
-    /// Reset all state (called on profile switch).
+    /// Reset runtime state while preserving chord configuration (called on profile switch).
     public func reset() {
         windowTimer?.invalidate()
         windowTimer = nil

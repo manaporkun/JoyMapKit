@@ -222,7 +222,8 @@ private final class RhythmGameViewModel: ObservableObject {
         // Pick a random prompt different from the current one.
         var next: ButtonPrompt
         repeat {
-            next = ButtonPrompt.allPrompts.randomElement()!
+            guard let candidate = ButtonPrompt.allPrompts.randomElement() else { return }
+            next = candidate
         } while next == currentPrompt && ButtonPrompt.allPrompts.count > 1
 
         currentPrompt = next
@@ -275,21 +276,16 @@ private final class RhythmGameViewModel: ObservableObject {
     }
 
     private func onMiss() {
-        let hadCombo = combo > 3
-        combo = 0
-        totalMisses += 1
-        showFeedback(.miss)
-        if hadCombo {
-            SoundFX.shared.playComboBreak()
-        } else {
-            SoundFX.shared.playMiss()
-        }
-        advancePrompt()
+        registerMiss()
     }
 
     private func onTimeout() {
         guard !currentPromptAnswered else { return }
         currentPromptAnswered = true
+        registerMiss()
+    }
+
+    private func registerMiss() {
         let hadCombo = combo > 3
         combo = 0
         totalMisses += 1
