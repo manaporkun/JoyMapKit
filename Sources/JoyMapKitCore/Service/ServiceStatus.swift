@@ -16,12 +16,14 @@ public struct ServiceStatus: Equatable {
         self.accessibilityGranted = false
     }
 
-    public struct ControllerSummary: Equatable, Codable {
+    public struct ControllerSummary: Equatable, Codable, Identifiable {
+        public var id: UUID
         public var name: String
         public var type: ControllerType
         public var elementCount: Int
 
-        public init(name: String, type: ControllerType, elementCount: Int) {
+        public init(id: UUID = UUID(), name: String, type: ControllerType, elementCount: Int) {
+            self.id = id
             self.name = name
             self.type = type
             self.elementCount = elementCount

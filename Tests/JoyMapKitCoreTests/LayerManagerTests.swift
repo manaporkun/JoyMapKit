@@ -112,4 +112,11 @@ final class LayerManagerTests: XCTestCase {
         manager.deactivate("combat")
         XCTAssertFalse(manager.isActive("combat"))
     }
+
+    func testMostRecentlyActivatedLayerHasHighestPriority() {
+        manager.activate("combat")
+        manager.activate("menu")
+
+        XCTAssertEqual(manager.activeLayersInPriorityOrder, ["menu", "combat"])
+    }
 }

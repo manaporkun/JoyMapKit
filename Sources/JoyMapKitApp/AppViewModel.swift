@@ -29,7 +29,7 @@ final class AppViewModel: ObservableObject {
     private var inputBuffer: [String: Float] = [:]
 
     struct ControllerInfo: Identifiable {
-        let id = UUID()
+        let id: UUID
         let name: String
         let type: String
         let elementCount: Int
@@ -55,6 +55,9 @@ final class AppViewModel: ObservableObject {
         loadProfiles()
         startControllerMonitoring()
         startAccessibilityPolling()
+        if isEnabled {
+            startService()
+        }
     }
 
     func toggle() {
@@ -72,7 +75,9 @@ final class AppViewModel: ObservableObject {
             try svc.start()
             service = svc
             activeProfileName = svc.status.activeProfileName
+            isEnabled = true
         } catch {
+            isEnabled = false
             logger.error("Failed to start service: \(error.localizedDescription)")
         }
     }
@@ -104,22 +109,27 @@ final class AppViewModel: ObservableObject {
                     // Re-show banner if permission was revoked
                     if !granted { self.accessibilityBannerDismissed = false }
                 }
+                self.activeProfileName = self.service?.status.activeProfileName
+                self.focusedApp = self.service?.status.focusedApp?.displayName ?? "None"
             }
         }
     }
 
     func selectProfile(_ name: String) {
         let oldProfileName = activeProfileName
+        let wasEnabled = isEnabled
         // Restart service with the new profile
         stopService()
         do {
             let svc = try JoyMapService()
-            try svc.start(profileOverride: name)
+            try svc.start(profileOverride: name, autoSwitch: false)
             service = svc
             activeProfileName = name
+            isEnabled = true
         } catch {
             logger.error("Failed to switch profile: \(error.localizedDescription)")
             activeProfileName = oldProfileName
+            isEnabled = wasEnabled
         }
     }
 
@@ -196,6 +206,7 @@ final class AppViewModel: ObservableObject {
         manager.onControllerConnected = { [weak self] handle in
             Task { @MainActor in
                 self?.controllers.append(ControllerInfo(
+                    id: handle.id,
                     name: handle.vendorName,
                     type: handle.controllerType.rawValue,
                     elementCount: handle.availableElements.count
@@ -205,7 +216,10 @@ final class AppViewModel: ObservableObject {
 
         manager.onControllerDisconnected = { [weak self] handle in
             Task { @MainActor in
-                self?.controllers.removeAll { $0.name == handle.vendorName }
+                guard let self else { return }
+                if let index = self.controllers.firstIndex(where: { $0.id == handle.id }) {
+                    self.controllers.remove(at: index)
+                }
             }
         }
 

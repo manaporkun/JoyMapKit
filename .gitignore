@@ -7,4 +7,6 @@ DerivedData/
 .netrc
 *.xcodeproj
 *.app
+*.dmg
+*.zip
 .claude/plans/

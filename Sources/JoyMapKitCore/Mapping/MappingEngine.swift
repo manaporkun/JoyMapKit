@@ -336,10 +336,9 @@ public final class MappingEngine {
     /// Resolve a binding for a single element, checking active layers first (most recently activated wins),
     /// then falling back to base profile bindings. Uses pre-indexed dictionaries for O(1) lookup.
     private func resolveBinding(for elementName: String, in profile: Profile) -> BindingConfig? {
-        // Check active layers (reverse order so most-recently-activated wins)
-        for layer in profile.layers.reversed() {
-            guard layerManager.isActive(layer.name) else { continue }
-            if let binding = layerBindingIndices[layer.name]?[elementName] {
+        // Check active layers in activation order so the last-activated layer wins.
+        for layerName in layerManager.activeLayersInPriorityOrder {
+            if let binding = layerBindingIndices[layerName]?[elementName] {
                 return binding
             }
         }

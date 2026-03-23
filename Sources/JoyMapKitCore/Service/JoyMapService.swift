@@ -15,6 +15,7 @@ public final class JoyMapService {
     private let logger = Logger(label: "com.joymapkit.service")
 
     private var config: GlobalConfig
+    private var autoSwitchEnabled = true
 
     public init(configDirectory: URL? = nil) throws {
         let configDir = configDirectory ?? ConfigManager.defaultConfigDirectory
@@ -40,9 +41,14 @@ public final class JoyMapService {
 
         self.config = try configManager.load()
         self.status = ServiceStatus()
+        self.mappingEngine.onProfileSwitchRequested = { [weak self] name in
+            self?.switchToProfile(named: name, source: "binding")
+        }
     }
 
     public func start(profileOverride: String? = nil, autoSwitch: Bool = true) throws {
+        self.autoSwitchEnabled = autoSwitch
+
         // Check accessibility
         let hasAccess = PermissionChecker.checkAccessibility(prompt: true)
         status.accessibilityGranted = hasAccess
@@ -116,11 +122,32 @@ public final class JoyMapService {
         status.activeProfileName = profile.name
     }
 
+    private func switchToProfile(named name: String, source: String) {
+        let profiles: [Profile]
+        do {
+            profiles = try profileStore.loadAll()
+        } catch {
+            logger.error("Failed to reload profiles for \(source) switch: \(error)")
+            return
+        }
+
+        guard let profile = profiles.first(where: { $0.name == name }) else {
+            logger.warning("Requested \(source) profile '\(name)' does not exist")
+            return
+        }
+
+        profileResolver.updateProfiles(profiles)
+        autoSwitchEnabled = false
+        activateProfile(profile)
+        logger.info("Switched to profile: \(profile.name) via \(source)")
+    }
+
     // MARK: - Callbacks
 
     private func onControllerConnected(_ handle: ControllerHandle) {
         status.connectedControllers.append(
             ServiceStatus.ControllerSummary(
+                id: handle.id,
                 name: handle.vendorName,
                 type: handle.controllerType,
                 elementCount: handle.availableElements.count
@@ -136,13 +163,16 @@ public final class JoyMapService {
     }
 
     private func onControllerDisconnected(_ handle: ControllerHandle) {
-        status.connectedControllers.removeAll { $0.name == handle.vendorName }
+        if let index = status.connectedControllers.firstIndex(where: { $0.id == handle.id }) {
+            status.connectedControllers.remove(at: index)
+        }
         mappingEngine.releaseAllHeldKeys()
         logger.info("Controller disconnected: \(handle.vendorName)")
     }
 
     private func onAppChanged(_ app: AppIdentifier) {
         status.focusedApp = app
+        guard autoSwitchEnabled else { return }
 
         guard let controller = controllerManager.connectedControllers.first else { return }
 
