@@ -93,9 +93,9 @@ final class AppViewModel: ObservableObject {
 
     private func startAccessibilityPolling() {
         // Always poll — each rebuild can change the codesign identity
-        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
-            Task { @MainActor in
-                guard let self else { timer.invalidate(); return }
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
                 let granted = PermissionChecker.isAccessibilityGranted()
                 if granted != self.accessibilityGranted {
                     self.accessibilityGranted = granted

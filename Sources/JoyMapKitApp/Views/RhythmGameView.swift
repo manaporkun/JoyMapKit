@@ -181,12 +181,12 @@ private final class RhythmGameViewModel: ObservableObject {
         countdownNumber = 3
 
         SoundFX.shared.playCountdown()
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
-            Task { @MainActor [weak self] in
-                guard let self else { timer.invalidate(); return }
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
                 self.countdownNumber -= 1
                 if self.countdownNumber < 0 {
-                    timer.invalidate()
+                    self.countdownTimer?.invalidate()
                     self.countdownTimer = nil
                     SoundFX.shared.playStart()
                     self.beginPlaying()
@@ -233,13 +233,13 @@ private final class RhythmGameViewModel: ObservableObject {
 
         // Tick timer to animate the countdown bar (~60fps).
         tickTimer?.invalidate()
-        tickTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
-            Task { @MainActor [weak self] in
-                guard let self else { timer.invalidate(); return }
+        tickTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
                 let remaining = self.promptDeadline.timeIntervalSinceNow
                 if remaining <= 0 {
                     self.timeRemaining = 0
-                    timer.invalidate()
+                    self.tickTimer?.invalidate()
                     self.tickTimer = nil
                     self.onTimeout()
                 } else {
