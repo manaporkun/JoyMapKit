@@ -31,13 +31,13 @@ Swift Package. Requires macOS 13+.
 ### Homebrew
 
 ```
-brew install orkunmanap/tap/joymapkit
+brew install manaporkun/tap/joymapkit
 ```
 
 ### Build from Source
 
 ```
-git clone https://github.com/orkunmanap/JoyMapKit.git
+git clone https://github.com/manaporkun/JoyMapKit.git
 cd JoyMapKit
 swift build -c release
 ```

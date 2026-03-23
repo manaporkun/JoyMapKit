@@ -2,83 +2,100 @@ import Foundation
 import Logging
 
 /// The heart of the system. Receives raw input events, resolves bindings, dispatches actions.
+/// Supports single bindings, chords, layers, macros, and whileHeld auto-repeat.
 public final class MappingEngine {
     private let actionDispatcher: ActionDispatching
+    private let chordDetector: ChordDetector
+    private let layerManager: LayerManager
+    private let macroRunner: MacroRunner
     private let logger = Logger(label: "com.joymapkit.engine")
 
     private var activeProfile: Profile?
     private var heldBindings: [String: ActionConfig] = [:]
+    /// Elements consumed by an active chord → the chord's action.
+    private var activeChordActions: [String: ActionConfig] = [:]
+    /// Timers for whileHeld auto-repeat, keyed by element name.
+    private var whileHeldTimers: [String: Timer] = [:]
+
+    /// Handles analog stick and trigger inputs. Set by JoyMapService.
+    public var analogHandler: AnalogHandler?
+
+    /// Called when a profile switch is requested via a binding action.
+    public var onProfileSwitchRequested: ((String) -> Void)?
 
     public init(actionDispatcher: ActionDispatching) {
         self.actionDispatcher = actionDispatcher
+        self.chordDetector = ChordDetector()
+        self.layerManager = LayerManager()
+        self.macroRunner = MacroRunner(actionDispatcher: actionDispatcher)
+
+        // Wire chord detector's deferred press callback
+        chordDetector.onDeferredPress = { [weak self] elementName in
+            self?.handleDeferredPress(elementName)
+        }
+
+        // Wire action dispatcher callbacks
+        if let dispatcher = actionDispatcher as? ActionDispatcher {
+            dispatcher.onMacro = { [weak self] macro, key, pressed in
+                guard let self else { return }
+                if pressed {
+                    self.macroRunner.start(macro, key: key)
+                } else {
+                    self.macroRunner.cancel(key: key)
+                }
+            }
+
+            dispatcher.onProfileSwitch = { [weak self] name in
+                self?.onProfileSwitchRequested?(name)
+            }
+
+            dispatcher.onLayerToggle = { [weak self] name in
+                self?.layerManager.toggle(name)
+            }
+        }
     }
 
     /// Set the active mapping profile. Releases all held keys before switching.
     public func setProfile(_ profile: Profile?) {
         releaseAllHeldKeys()
+        macroRunner.cancelAll()
+        chordDetector.reset()
+        layerManager.deactivateAll()
+        invalidateAllWhileHeldTimers()
+
         activeProfile = profile
+
         if let profile {
+            // Configure chord detector with all chord bindings (base + layers)
+            var allBindings = profile.bindings
+            for layer in profile.layers {
+                allBindings.append(contentsOf: layer.bindings)
+            }
+            chordDetector.configure(bindings: allBindings)
             logger.info("Profile activated: \(profile.name)")
         }
     }
 
     /// Handle an input event from a controller.
-    /// - Parameters:
-    ///   - elementName: The canonical name of the input element (from GCPhysicalInputProfile).
-    ///   - value: The input value (0.0 = released, >0 = pressed/active for buttons; -1 to 1 for axes).
-    ///   - controller: The controller handle that generated the event.
     public func handleInput(elementName: String, value: Float, from controller: ControllerHandle) {
         guard let profile = activeProfile else { return }
 
+        // 1. Route analog inputs (sticks, triggers) to the analog pipeline first
+        if let analogHandler, analogHandler.handleInput(elementName: elementName, value: value) {
+            return
+        }
+
         let pressed = value > 0.1
-        let wasHeld = heldBindings[elementName] != nil
 
-        // Find matching binding for this input
-        guard let binding = findBinding(for: elementName, in: profile) else { return }
+        // 2. Handle layer activators
+        if handleLayerActivator(elementName: elementName, pressed: pressed, in: profile) {
+            return
+        }
 
-        let holdBehavior = binding.holdBehavior ?? .onPress
-
-        switch holdBehavior {
-        case .onPress:
-            if pressed && !wasHeld {
-                dispatch(binding.action, pressed: true)
-                heldBindings[elementName] = binding.action
-            } else if !pressed && wasHeld {
-                dispatch(binding.action, pressed: false)
-                heldBindings.removeValue(forKey: elementName)
-            }
-
-        case .onRelease:
-            if pressed && !wasHeld {
-                heldBindings[elementName] = binding.action
-            } else if !pressed && wasHeld {
-                // Tap on release
-                dispatch(binding.action, pressed: true)
-                dispatch(binding.action, pressed: false)
-                heldBindings.removeValue(forKey: elementName)
-            }
-
-        case .toggle:
-            if pressed && !wasHeld {
-                if heldBindings[elementName] != nil {
-                    dispatch(binding.action, pressed: false)
-                    heldBindings.removeValue(forKey: elementName)
-                } else {
-                    dispatch(binding.action, pressed: true)
-                    heldBindings[elementName] = binding.action
-                }
-            }
-
-        case .whileHeld:
-            // Basic implementation: same as onPress for now
-            // Phase 4 will add auto-repeat timer
-            if pressed && !wasHeld {
-                dispatch(binding.action, pressed: true)
-                heldBindings[elementName] = binding.action
-            } else if !pressed && wasHeld {
-                dispatch(binding.action, pressed: false)
-                heldBindings.removeValue(forKey: elementName)
-            }
+        if pressed {
+            handlePress(elementName: elementName, in: profile)
+        } else {
+            handleRelease(elementName: elementName)
         }
     }
 
@@ -88,20 +105,189 @@ public final class MappingEngine {
             dispatch(action, pressed: false)
         }
         heldBindings.removeAll()
+
+        for (_, action) in activeChordActions {
+            dispatch(action, pressed: false)
+        }
+        activeChordActions.removeAll()
+
+        invalidateAllWhileHeldTimers()
     }
 
-    // MARK: - Private
+    // MARK: - Private — Press/Release Flow
 
-    private func findBinding(for elementName: String, in profile: Profile) -> BindingConfig? {
-        // Check base-level bindings (no layer filtering in Phase 1)
-        profile.bindings.first { binding in
-            switch binding.input {
-            case .single(let name):
-                return name == elementName
-            case .chord, .sequence:
-                // Phase 4: chord/sequence matching
-                return false
+    private func handlePress(elementName: String, in profile: Profile) {
+        let wasHeld = heldBindings[elementName] != nil
+
+        // Check chord detector first
+        let chordResult = chordDetector.handlePress(elementName)
+
+        switch chordResult {
+        case .immediate:
+            // Not a chord participant — resolve binding normally
+            guard let binding = resolveBinding(for: elementName, in: profile) else { return }
+            applyHoldBehavior(binding: binding, elementName: elementName, pressed: true, wasHeld: wasHeld)
+
+        case .deferred:
+            // Waiting for chord window — do nothing yet
+            break
+
+        case .chordMatched(let binding, let elements):
+            // Chord matched — dispatch chord action, suppress individual actions
+            dispatch(binding.action, pressed: true)
+            for element in elements {
+                activeChordActions[element] = binding.action
+                // Remove any pending single presses from held state
+                if let heldAction = heldBindings.removeValue(forKey: element) {
+                    dispatch(heldAction, pressed: false)
+                }
             }
+        }
+    }
+
+    private func handleRelease(elementName: String) {
+        chordDetector.handleRelease(elementName)
+
+        // Check if this element was part of an active chord
+        if let chordAction = activeChordActions.removeValue(forKey: elementName) {
+            // Release the chord action when the first chord member is released
+            // Remove all other chord members referencing this same action
+            let sameActionElements = activeChordActions.filter { $0.value == chordAction }.map(\.key)
+            for element in sameActionElements {
+                activeChordActions.removeValue(forKey: element)
+            }
+            dispatch(chordAction, pressed: false)
+            return
+        }
+
+        // Normal release for single bindings
+        if let heldAction = heldBindings[elementName] {
+            let binding = activeProfile.flatMap { resolveBinding(for: elementName, in: $0) }
+            let holdBehavior = binding?.holdBehavior ?? .onPress
+
+            switch holdBehavior {
+            case .onPress, .whileHeld:
+                dispatch(heldAction, pressed: false)
+                heldBindings.removeValue(forKey: elementName)
+                invalidateWhileHeldTimer(for: elementName)
+
+            case .onRelease:
+                // Tap on release
+                dispatch(heldAction, pressed: true)
+                dispatch(heldAction, pressed: false)
+                heldBindings.removeValue(forKey: elementName)
+
+            case .toggle:
+                // Toggle doesn't release on button release — it toggles on next press
+                break
+            }
+        }
+    }
+
+    /// Called by ChordDetector when the chord window expires for a deferred press.
+    private func handleDeferredPress(_ elementName: String) {
+        guard let profile = activeProfile else { return }
+        let wasHeld = heldBindings[elementName] != nil
+        guard let binding = resolveBinding(for: elementName, in: profile) else { return }
+        applyHoldBehavior(binding: binding, elementName: elementName, pressed: true, wasHeld: wasHeld)
+    }
+
+    // MARK: - Private — Hold Behavior
+
+    private func applyHoldBehavior(binding: BindingConfig, elementName: String, pressed: Bool, wasHeld: Bool) {
+        let holdBehavior = binding.holdBehavior ?? .onPress
+
+        guard pressed && !wasHeld else { return }
+
+        switch holdBehavior {
+        case .onPress:
+            dispatch(binding.action, pressed: true)
+            heldBindings[elementName] = binding.action
+
+        case .onRelease:
+            // Just track that it's held — action fires on release
+            heldBindings[elementName] = binding.action
+
+        case .toggle:
+            if heldBindings[elementName] != nil {
+                dispatch(binding.action, pressed: false)
+                heldBindings.removeValue(forKey: elementName)
+            } else {
+                dispatch(binding.action, pressed: true)
+                heldBindings[elementName] = binding.action
+            }
+
+        case .whileHeld(let repeatIntervalMs):
+            dispatch(binding.action, pressed: true)
+            heldBindings[elementName] = binding.action
+            startWhileHeldTimer(for: elementName, action: binding.action, intervalMs: repeatIntervalMs)
+        }
+    }
+
+    // MARK: - Private — whileHeld Auto-Repeat
+
+    private func startWhileHeldTimer(for elementName: String, action: ActionConfig, intervalMs: Int) {
+        invalidateWhileHeldTimer(for: elementName)
+        let interval = Double(max(intervalMs, 10)) / 1000.0
+        whileHeldTimers[elementName] = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            // Tap: release then press to simulate repeated key taps
+            self?.dispatch(action, pressed: false)
+            self?.dispatch(action, pressed: true)
+        }
+    }
+
+    private func invalidateWhileHeldTimer(for elementName: String) {
+        whileHeldTimers[elementName]?.invalidate()
+        whileHeldTimers.removeValue(forKey: elementName)
+    }
+
+    private func invalidateAllWhileHeldTimers() {
+        for (_, timer) in whileHeldTimers {
+            timer.invalidate()
+        }
+        whileHeldTimers.removeAll()
+    }
+
+    // MARK: - Private — Layer Activators
+
+    /// Check if this element is a layer activator. Returns true if consumed.
+    private func handleLayerActivator(elementName: String, pressed: Bool, in profile: Profile) -> Bool {
+        for layer in profile.layers {
+            if case .single(let activatorElement) = layer.activator, activatorElement == elementName {
+                if pressed {
+                    layerManager.activate(layer.name)
+                } else {
+                    layerManager.deactivate(layer.name)
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    // MARK: - Private — Binding Resolution
+
+    /// Resolve a binding for a single element, checking active layers first (most recently activated wins),
+    /// then falling back to base profile bindings.
+    private func resolveBinding(for elementName: String, in profile: Profile) -> BindingConfig? {
+        // Check active layers (reverse order so most-recently-activated wins)
+        for layer in profile.layers.reversed() {
+            guard layerManager.isActive(layer.name) else { continue }
+            if let binding = findSingleBinding(for: elementName, in: layer.bindings) {
+                return binding
+            }
+        }
+
+        // Fall back to base bindings
+        return findSingleBinding(for: elementName, in: profile.bindings)
+    }
+
+    private func findSingleBinding(for elementName: String, in bindings: [BindingConfig]) -> BindingConfig? {
+        bindings.first { binding in
+            if case .single(let name) = binding.input {
+                return name == elementName
+            }
+            return false
         }
     }
 

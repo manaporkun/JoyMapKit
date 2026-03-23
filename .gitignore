@@ -3,6 +3,8 @@
 /Packages
 xcuserdata/
 DerivedData/
-.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.swiftpm/xcode/package.xcworkspacedata
 .netrc
 *.xcodeproj
+*.app
+.claude/plans/

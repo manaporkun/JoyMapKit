@@ -3,7 +3,7 @@ import Foundation
 import JoyMapKitCore
 import GameController
 
-struct ListCommand: AsyncParsableCommand {
+struct ListCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
         abstract: "List connected controllers or saved profiles",
@@ -12,7 +12,7 @@ struct ListCommand: AsyncParsableCommand {
     )
 }
 
-struct ListControllers: AsyncParsableCommand {
+struct ListControllers: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "controllers",
         abstract: "List connected game controllers"
@@ -21,18 +21,10 @@ struct ListControllers: AsyncParsableCommand {
     @Flag(name: .long, help: "Output in JSON format")
     var json: Bool = false
 
-    func run() async throws {
-        // Need a brief run loop to let GameController discover devices
-        let controllers = await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                // Give the framework a moment to enumerate
-                Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
-                    let controllers = GCController.controllers()
-                    continuation.resume(returning: controllers)
-                }
-                RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
-            }
-        }
+    func run() throws {
+        // Pump the RunLoop briefly to let GameController discover devices
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
+        let controllers = GCController.controllers()
 
         if json {
             printControllersJSON(controllers)
@@ -48,7 +40,7 @@ struct ListControllers: AsyncParsableCommand {
         }
 
         print("Connected Controllers:")
-        print(String(repeating: "─", count: 70))
+        print(String(repeating: "-", count: 70))
         for (index, controller) in controllers.enumerated() {
             let name = controller.vendorName ?? "Unknown"
             let category = controller.productCategory
@@ -88,7 +80,7 @@ struct ListControllers: AsyncParsableCommand {
     }
 }
 
-struct ListProfiles: AsyncParsableCommand {
+struct ListProfiles: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "profiles",
         abstract: "List saved mapping profiles"
@@ -97,7 +89,7 @@ struct ListProfiles: AsyncParsableCommand {
     @Option(name: .long, help: "Config directory path")
     var configDir: String?
 
-    func run() async throws {
+    func run() throws {
         let configDirectory: URL
         if let configDir {
             configDirectory = URL(fileURLWithPath: configDir)
@@ -115,7 +107,7 @@ struct ListProfiles: AsyncParsableCommand {
         }
 
         print("Profiles:")
-        print(String(repeating: "─", count: 60))
+        print(String(repeating: "-", count: 60))
         for profile in profiles {
             let apps = profile.appBundleIDs.joined(separator: ", ")
             let bindings = profile.bindings.count

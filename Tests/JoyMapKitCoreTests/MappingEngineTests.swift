@@ -84,10 +84,6 @@ final class MappingEngineTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeMockHandle() -> ControllerHandle {
-        // ControllerHandle requires a GCController, which we can't easily mock.
-        // For unit tests, we test the engine logic through its public API.
-        // The handle is passed through but not accessed by the engine in Phase 1.
-        // We use an unsafe workaround for testing only.
-        return unsafeBitCast(NSObject(), to: ControllerHandle.self)
+        ControllerHandle(vendorName: "Test Controller", controllerType: .generic)
     }
 }

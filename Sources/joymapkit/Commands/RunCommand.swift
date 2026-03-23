@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import JoyMapKitCore
 
-struct RunCommand: AsyncParsableCommand {
+struct RunCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
         abstract: "Start the mapping service in the foreground"
@@ -17,7 +17,7 @@ struct RunCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Config directory path (default: ~/.config/joymapkit)")
     var configDir: String?
 
-    func run() async throws {
+    func run() throws {
         let configDirectory: URL?
         if let configDir {
             configDirectory = URL(fileURLWithPath: configDir)
@@ -62,9 +62,7 @@ struct RunCommand: AsyncParsableCommand {
             print("  Active profile: \(profileName)")
         }
 
-        // Keep alive using async-compatible approach
-        while true {
-            try await Task.sleep(nanoseconds: 1_000_000_000)
-        }
+        // Run the main RunLoop — required for GameController & NSWorkspace notifications
+        RunLoop.main.run()
     }
 }
