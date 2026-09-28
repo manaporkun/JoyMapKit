@@ -1,5 +1,6 @@
 import Foundation
 import Logging
+import CoreGraphics
 
 /// Protocol for dispatching output actions, enabling testability.
 public protocol ActionDispatching {
@@ -14,6 +15,18 @@ public final class ActionDispatcher: ActionDispatching {
     private let keySimulator: KeySimulating
     private let mouseSimulator: MouseSimulating
     private let logger = Logger(label: "com.joymapkit.dispatcher")
+
+    /// Modifier flags from bare modifier keys (e.g. a button bound to Command) currently held.
+    /// Merged into every simulated key event so held modifiers combine like a real keyboard.
+    private var heldModifierFlags = CGEventFlags()
+
+    private static let modifierKeyFlags: [UInt16: CGEventFlags] = [
+        55: .maskCommand, 54: .maskCommand,
+        56: .maskShift, 60: .maskShift,
+        58: .maskAlternate, 61: .maskAlternate,
+        59: .maskControl, 62: .maskControl,
+        63: .maskSecondaryFn,
+    ]
 
     /// Called when a macro action is dispatched (pressed=true starts, pressed=false cancels).
     public var onMacro: ((_ macro: ActionConfig.MacroAction, _ key: String, _ pressed: Bool) -> Void)?
@@ -32,10 +45,20 @@ public final class ActionDispatcher: ActionDispatching {
     public func dispatch(_ action: ActionConfig, pressed: Bool) throws {
         switch action {
         case .keyPress(let keyAction):
+            if let modifierFlag = Self.modifierKeyFlags[keyAction.keyCode] {
+                if pressed {
+                    heldModifierFlags.insert(modifierFlag)
+                } else {
+                    heldModifierFlags.remove(modifierFlag)
+                }
+                try keySimulator.modifierChanged(code: keyAction.keyCode, flags: heldModifierFlags)
+                return
+            }
+            let flags = keyAction.eventFlags.union(heldModifierFlags)
             if pressed {
-                try keySimulator.pressKey(code: keyAction.keyCode, flags: keyAction.eventFlags)
+                try keySimulator.pressKey(code: keyAction.keyCode, flags: flags)
             } else {
-                try keySimulator.releaseKey(code: keyAction.keyCode, flags: keyAction.eventFlags)
+                try keySimulator.releaseKey(code: keyAction.keyCode, flags: flags)
             }
 
         case .mouseClick(let clickAction):
