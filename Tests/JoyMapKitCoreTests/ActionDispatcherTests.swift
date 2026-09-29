@@ -10,13 +10,15 @@ final class MockKeySimulator: KeySimulating {
     }
 
     var events: [Event] = []
+    var onEvent: ((Event) -> Void)?
+    var modifierChangeError: Error?
 
     func pressKey(code: UInt16, flags: CGEventFlags) throws {
-        events.append(.press(code, flags.rawValue))
+        record(.press(code, flags.rawValue))
     }
 
     func releaseKey(code: UInt16, flags: CGEventFlags) throws {
-        events.append(.release(code, flags.rawValue))
+        record(.release(code, flags.rawValue))
     }
 
     func tapKey(code: UInt16, flags: CGEventFlags, holdMs: Int?) throws {
@@ -25,7 +27,13 @@ final class MockKeySimulator: KeySimulating {
     }
 
     func modifierChanged(code: UInt16, flags: CGEventFlags) throws {
-        events.append(.modifier(code, flags.rawValue))
+        if let modifierChangeError { throw modifierChangeError }
+        record(.modifier(code, flags.rawValue))
+    }
+
+    private func record(_ event: Event) {
+        events.append(event)
+        onEvent?(event)
     }
 }
 
@@ -91,5 +99,64 @@ final class ActionDispatcherTests: XCTestCase {
             keySimulator.events.last,
             .press(123, CGEventFlags([.maskShift, .maskAlternate]).rawValue)
         )
+    }
+
+    func testTwoBindingsForSameModifierShareFirstPressAndFinalRelease() throws {
+        try dispatcher.dispatch(command, pressed: true)
+        try dispatcher.dispatch(command, pressed: true)
+        try dispatcher.dispatch(command, pressed: false)
+        try dispatcher.dispatch(leftArrow, pressed: true)
+        try dispatcher.dispatch(command, pressed: false)
+        try dispatcher.dispatch(command, pressed: false) // Unmatched cleanup is harmless.
+        try dispatcher.dispatch(leftArrow, pressed: true)
+
+        XCTAssertEqual(keySimulator.events, [
+            .modifier(55, CGEventFlags.maskCommand.rawValue),
+            .press(123, CGEventFlags.maskCommand.rawValue),
+            .modifier(55, 0),
+            .press(123, 0),
+        ])
+    }
+
+    func testReleasingLeftCommandPreservesRightCommand() throws {
+        let rightCommand = ActionConfig.keyPress(.init(keyCode: 54))
+        try dispatcher.dispatch(command, pressed: true)
+        try dispatcher.dispatch(rightCommand, pressed: true)
+        try dispatcher.dispatch(command, pressed: false)
+        try dispatcher.dispatch(leftArrow, pressed: true)
+        XCTAssertEqual(keySimulator.events.last, .press(123, CGEventFlags.maskCommand.rawValue))
+
+        try dispatcher.dispatch(rightCommand, pressed: false)
+        try dispatcher.dispatch(leftArrow, pressed: true)
+        XCTAssertEqual(keySimulator.events.last, .press(123, 0))
+    }
+
+    func testModifierKeyWithExplicitModifiersKeepsConfiguredFlags() throws {
+        let commandShift = ActionConfig.keyPress(.init(keyCode: 56, modifiers: [.command, .shift]))
+        let option = ActionConfig.keyPress(.init(keyCode: 58))
+        try dispatcher.dispatch(option, pressed: true)
+        try dispatcher.dispatch(commandShift, pressed: true)
+        try dispatcher.dispatch(commandShift, pressed: false)
+        let combined = CGEventFlags([.maskCommand, .maskShift, .maskAlternate]).rawValue
+        XCTAssertEqual(keySimulator.events.suffix(2), [.press(56, combined), .release(56, combined)])
+
+        try dispatcher.dispatch(leftArrow, pressed: true)
+        XCTAssertEqual(keySimulator.events.last, .press(123, CGEventFlags.maskAlternate.rawValue))
+    }
+
+    func testFailedModifierEventDoesNotChangeHeldState() throws {
+        keySimulator.modifierChangeError = SimulationError.eventCreationFailed
+        XCTAssertThrowsError(try dispatcher.dispatch(command, pressed: true))
+        keySimulator.modifierChangeError = nil
+        try dispatcher.dispatch(leftArrow, pressed: true)
+        XCTAssertEqual(keySimulator.events.last, .press(123, 0))
+
+        try dispatcher.dispatch(command, pressed: true)
+        keySimulator.modifierChangeError = SimulationError.eventCreationFailed
+        XCTAssertThrowsError(try dispatcher.dispatch(command, pressed: false))
+        keySimulator.modifierChangeError = nil
+        try dispatcher.dispatch(command, pressed: false)
+        try dispatcher.dispatch(leftArrow, pressed: true)
+        XCTAssertEqual(keySimulator.events.last, .press(123, 0))
     }
 }

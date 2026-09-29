@@ -16,9 +16,13 @@ public final class ActionDispatcher: ActionDispatching {
     private let mouseSimulator: MouseSimulating
     private let logger = Logger(label: "com.joymapkit.dispatcher")
 
-    /// Modifier flags from bare modifier keys (e.g. a button bound to Command) currently held.
-    /// Merged into every simulated key event so held modifiers combine like a real keyboard.
-    private var heldModifierFlags = CGEventFlags()
+    /// Number of active bare modifier bindings for each virtual key.
+    private var heldModifierCounts: [UInt16: Int] = [:]
+
+    /// Flags shared by key actions dispatched while bare modifier bindings are held.
+    private var heldModifierFlags: CGEventFlags {
+        Self.modifierFlags(for: heldModifierCounts)
+    }
 
     private static let modifierKeyFlags: [UInt16: CGEventFlags] = [
         55: .maskCommand, 54: .maskCommand,
@@ -45,13 +49,8 @@ public final class ActionDispatcher: ActionDispatching {
     public func dispatch(_ action: ActionConfig, pressed: Bool) throws {
         switch action {
         case .keyPress(let keyAction):
-            if let modifierFlag = Self.modifierKeyFlags[keyAction.keyCode] {
-                if pressed {
-                    heldModifierFlags.insert(modifierFlag)
-                } else {
-                    heldModifierFlags.remove(modifierFlag)
-                }
-                try keySimulator.modifierChanged(code: keyAction.keyCode, flags: heldModifierFlags)
+            if keyAction.modifiers.isEmpty, Self.modifierKeyFlags[keyAction.keyCode] != nil {
+                try dispatchModifier(code: keyAction.keyCode, pressed: pressed)
                 return
             }
             let flags = keyAction.eventFlags.union(heldModifierFlags)
@@ -95,6 +94,29 @@ public final class ActionDispatcher: ActionDispatching {
         case .none:
             break
         }
+    }
+
+    private static func modifierFlags(for counts: [UInt16: Int]) -> CGEventFlags {
+        counts.keys.reduce(into: CGEventFlags()) { flags, code in
+            if let flag = modifierKeyFlags[code] {
+                flags.formUnion(flag)
+            }
+        }
+    }
+
+    private func dispatchModifier(code: UInt16, pressed: Bool) throws {
+        let count = heldModifierCounts[code, default: 0]
+        guard pressed || count > 0 else { return }
+
+        var updatedCounts = heldModifierCounts
+        let updatedCount = pressed ? count + 1 : count - 1
+        updatedCounts[code] = updatedCount > 0 ? updatedCount : nil
+
+        // Multiple bindings for one virtual key share its first press and final release.
+        if count == 0 || updatedCount == 0 {
+            try keySimulator.modifierChanged(code: code, flags: Self.modifierFlags(for: updatedCounts))
+        }
+        heldModifierCounts = updatedCounts
     }
 
     private func executeShell(_ action: ActionConfig.ShellAction) {

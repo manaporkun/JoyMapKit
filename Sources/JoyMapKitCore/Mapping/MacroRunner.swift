@@ -7,8 +7,13 @@ public final class MacroRunner {
     private let actionDispatcher: ActionDispatching
     private let logger = Logger(label: "com.joymapkit.macro")
 
-    /// Currently running macro tasks, keyed by an identifier.
-    private var runningTasks: [String: Task<Void, Never>] = [:]
+    private final class RunningMacro {
+        var task: Task<Void, Never>?
+        var heldAction: ActionConfig?
+    }
+
+    /// Currently running macros, including the action each one must release on cancellation.
+    private var runningTasks: [String: RunningMacro] = [:]
 
     public init(actionDispatcher: ActionDispatching) {
         self.actionDispatcher = actionDispatcher
@@ -23,8 +28,18 @@ public final class MacroRunner {
 
         let dispatcher = actionDispatcher
         let logger = self.logger
+        let run = RunningMacro()
+        runningTasks[key] = run
 
-        runningTasks[key] = Task { @MainActor [weak self] in
+        run.task = Task { @MainActor [weak self] in
+            defer {
+                do { try Self.releaseHeldAction(run, dispatcher: dispatcher) }
+                catch { logger.error("Macro release failed: \(error)") }
+                // An older cancelled task must not remove its replacement.
+                if self?.runningTasks[key] === run {
+                    self?.runningTasks.removeValue(forKey: key)
+                }
+            }
             do {
                 for _ in 0..<max(macro.repeatCount, 1) {
                     try Task.checkCancellation()
@@ -32,13 +47,14 @@ public final class MacroRunner {
                     for step in macro.steps {
                         try Task.checkCancellation()
                         try dispatcher.dispatch(step.action, pressed: true)
+                        run.heldAction = step.action
 
                         if let holdMs = step.holdMs, holdMs > 0 {
                             try await Task.sleep(nanoseconds: UInt64(holdMs) * 1_000_000)
                         }
 
                         try Task.checkCancellation()
-                        try dispatcher.dispatch(step.action, pressed: false)
+                        try Self.releaseHeldAction(run, dispatcher: dispatcher)
 
                         if step.delayMs > 0 {
                             try await Task.sleep(nanoseconds: UInt64(step.delayMs) * 1_000_000)
@@ -50,22 +66,27 @@ public final class MacroRunner {
             } catch {
                 logger.error("Macro '\(macro.name ?? key)' failed: \(error)")
             }
-
-            self?.runningTasks.removeValue(forKey: key)
         }
     }
 
     /// Cancel a running macro by key.
     public func cancel(key: String) {
-        runningTasks[key]?.cancel()
-        runningTasks.removeValue(forKey: key)
+        guard let run = runningTasks.removeValue(forKey: key) else { return }
+        run.task?.cancel()
+        do { try Self.releaseHeldAction(run, dispatcher: actionDispatcher) }
+        catch { logger.error("Macro release failed: \(error)") }
     }
 
     /// Cancel all running macros.
     public func cancelAll() {
-        for (_, task) in runningTasks {
-            task.cancel()
+        for key in Array(runningTasks.keys) {
+            cancel(key: key)
         }
-        runningTasks.removeAll()
+    }
+
+    private static func releaseHeldAction(_ run: RunningMacro, dispatcher: ActionDispatching) throws {
+        guard let action = run.heldAction else { return }
+        run.heldAction = nil
+        try dispatcher.dispatch(action, pressed: false)
     }
 }
