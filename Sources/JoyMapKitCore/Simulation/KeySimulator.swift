@@ -7,6 +7,7 @@ public protocol KeySimulating {
     func pressKey(code: UInt16, flags: CGEventFlags) throws
     func releaseKey(code: UInt16, flags: CGEventFlags) throws
     func tapKey(code: UInt16, flags: CGEventFlags, holdMs: Int?) throws
+    func modifierChanged(code: UInt16, flags: CGEventFlags) throws
 }
 
 /// Simulates keyboard events using CGEvent.
@@ -34,6 +35,16 @@ public final class KeySimulator: KeySimulating {
         if !flags.isEmpty {
             event.flags = flags
         }
+        event.post(tap: .cghidEventTap)
+    }
+
+    /// Posts a flags-changed event for a modifier key; `flags` is the full modifier state after the change.
+    public func modifierChanged(code: UInt16, flags: CGEventFlags) throws {
+        guard let event = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(code), keyDown: !flags.isEmpty) else {
+            throw SimulationError.eventCreationFailed
+        }
+        event.type = .flagsChanged
+        event.flags = flags
         event.post(tap: .cghidEventTap)
     }
 

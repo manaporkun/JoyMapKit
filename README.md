@@ -7,6 +7,7 @@ Requires macOS 13+.
 ## Features
 
 - Map gamepad buttons to keyboard shortcuts with modifier support (command, option, control, shift, fn)
+- Hold modifier buttons together to combine them with other mapped key actions
 - Mouse cursor control via analog sticks with configurable sensitivity
 - Scroll emulation with adjustable speed
 - Analog stick response curves: linear, quadratic, cubic, sCurve, and custom
@@ -137,6 +138,35 @@ Set `appBundleIDs` to `["*"]` to match all applications. When multiple profiles 
 ### Stick Modes
 
 `mouse`, `scroll`, `wasd`, `arrows`, `disabled`
+
+### Held Modifier Buttons
+
+To hold Command, Shift, Option, Control, or Fn, bind a button to that modifier's key code with an empty `modifiers` array. Configure these bindings by editing your profile JSON; modifier keys are not yet listed in the app's key picker.
+
+For example, add these entries to `bindings`:
+
+```json
+[
+  {
+    "input": { "type": "single", "element": "Right Shoulder" },
+    "action": { "type": "keyPress", "keyCode": 55, "modifiers": [], "key": "Command" }
+  },
+  {
+    "input": { "type": "single", "element": "Left Shoulder" },
+    "action": { "type": "keyPress", "keyCode": 56, "modifiers": [], "key": "Shift" }
+  },
+  {
+    "input": { "type": "single", "element": "Direction Pad Left" },
+    "action": { "type": "keyPress", "keyCode": 123, "modifiers": [], "key": "Left Arrow" }
+  }
+]
+```
+
+Holding both shoulders and pressing D-pad Left sends Command+Shift+Left. Held modifiers also combine with a key action's explicit `modifiers`. Two buttons may hold the same modifier; it stays active until both are released. Use the default `onPress` behavior to hold a modifier, or `toggle` to keep it active until the next press.
+
+Supported key codes are Command `55` / right Command `54`, Shift `56` / right Shift `60`, Option `58` / right Option `61`, Control `59` / right Control `62`, and Fn `63`. A modifier-key action with a nonempty `modifiers` array keeps its existing shortcut behavior and does not become a held modifier binding.
+
+Triggers can use the same action in their `triggers` configuration. A configured trigger takes precedence over a single-button binding for that input. Held trigger actions are released on profile changes, service stop, and controller disconnect. Cancelling a macro also releases its current held action.
 
 ### Hold Behaviors
 

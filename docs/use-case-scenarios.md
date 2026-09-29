@@ -109,6 +109,7 @@ You have limited use of a keyboard and mouse but can comfortably hold a gamepad.
 **To go further:**
 - Add layers: hold a shoulder button to access a second set of bindings (Cmd+C, Cmd+V, Cmd+A, etc.)
 - Use toggle hold behavior for sticky modifiers (press Y once to hold Shift, press again to release)
+- Combine held modifier buttons with mapped key actions, such as Command+Shift+Left. See the [held modifier setup](../README.md#held-modifier-buttons) for the JSON bindings.
 - Set up macros for multi-step actions (select all + copy in one button press)
 - Use turbo for rapid-fire key repeats
 

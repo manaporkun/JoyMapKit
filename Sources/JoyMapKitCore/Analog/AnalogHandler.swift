@@ -125,7 +125,25 @@ public final class AnalogHandler {
 
         mouseDrivers.removeAll()
 
+        releaseAllHeldInputs()
+    }
+
+    /// Release outputs and clear input state after a disconnect, without stopping the tick loop.
+    public func releaseAllHeldInputs() {
+        let triggerActions = triggers.values.filter { $0.wasPressed }.compactMap { $0.config.action }
+        for name in triggers.keys {
+            triggers[name]?.wasPressed = false
+        }
+        for name in sticks.keys {
+            sticks[name]?.lastRawX = 0
+            sticks[name]?.lastRawY = 0
+        }
         releaseAllDirectionKeys()
+
+        for action in triggerActions {
+            do { try actionDispatcher.dispatch(action, pressed: false) }
+            catch { logger.error("Trigger release failed: \(error)") }
+        }
     }
 
     // MARK: - Private — Axis Updates
@@ -141,22 +159,23 @@ public final class AnalogHandler {
         guard var state = triggers[name] else { return }
 
         let result = state.processor.process(rawValue: value)
+        let wasPressed = state.wasPressed
+        state.wasPressed = result.isPressed
+        // Dispatch can synchronously switch profiles. Store state before calling out.
+        triggers[name] = state
 
         // Detect threshold crossing
-        if result.isPressed && !state.wasPressed {
+        if result.isPressed && !wasPressed {
             if let action = state.config.action {
                 do { try actionDispatcher.dispatch(action, pressed: true) }
                 catch { logger.error("Trigger dispatch failed: \(error)") }
             }
-        } else if !result.isPressed && state.wasPressed {
+        } else if !result.isPressed && wasPressed {
             if let action = state.config.action {
                 do { try actionDispatcher.dispatch(action, pressed: false) }
                 catch { logger.error("Trigger release failed: \(error)") }
             }
         }
-
-        state.wasPressed = result.isPressed
-        triggers[name] = state
     }
 
     // MARK: - Private — Tick Loop

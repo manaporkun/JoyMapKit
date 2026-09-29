@@ -1,5 +1,6 @@
 import Foundation
 import Logging
+import CoreGraphics
 
 /// Protocol for dispatching output actions, enabling testability.
 public protocol ActionDispatching {
@@ -14,6 +15,22 @@ public final class ActionDispatcher: ActionDispatching {
     private let keySimulator: KeySimulating
     private let mouseSimulator: MouseSimulating
     private let logger = Logger(label: "com.joymapkit.dispatcher")
+
+    /// Number of active bare modifier bindings for each virtual key.
+    private var heldModifierCounts: [UInt16: Int] = [:]
+
+    /// Flags shared by key actions dispatched while bare modifier bindings are held.
+    private var heldModifierFlags: CGEventFlags {
+        Self.modifierFlags(for: heldModifierCounts)
+    }
+
+    private static let modifierKeyFlags: [UInt16: CGEventFlags] = [
+        55: .maskCommand, 54: .maskCommand,
+        56: .maskShift, 60: .maskShift,
+        58: .maskAlternate, 61: .maskAlternate,
+        59: .maskControl, 62: .maskControl,
+        63: .maskSecondaryFn,
+    ]
 
     /// Called when a macro action is dispatched (pressed=true starts, pressed=false cancels).
     public var onMacro: ((_ macro: ActionConfig.MacroAction, _ key: String, _ pressed: Bool) -> Void)?
@@ -32,10 +49,15 @@ public final class ActionDispatcher: ActionDispatching {
     public func dispatch(_ action: ActionConfig, pressed: Bool) throws {
         switch action {
         case .keyPress(let keyAction):
+            if keyAction.modifiers.isEmpty, Self.modifierKeyFlags[keyAction.keyCode] != nil {
+                try dispatchModifier(code: keyAction.keyCode, pressed: pressed)
+                return
+            }
+            let flags = keyAction.eventFlags.union(heldModifierFlags)
             if pressed {
-                try keySimulator.pressKey(code: keyAction.keyCode, flags: keyAction.eventFlags)
+                try keySimulator.pressKey(code: keyAction.keyCode, flags: flags)
             } else {
-                try keySimulator.releaseKey(code: keyAction.keyCode, flags: keyAction.eventFlags)
+                try keySimulator.releaseKey(code: keyAction.keyCode, flags: flags)
             }
 
         case .mouseClick(let clickAction):
@@ -72,6 +94,29 @@ public final class ActionDispatcher: ActionDispatching {
         case .none:
             break
         }
+    }
+
+    private static func modifierFlags(for counts: [UInt16: Int]) -> CGEventFlags {
+        counts.keys.reduce(into: CGEventFlags()) { flags, code in
+            if let flag = modifierKeyFlags[code] {
+                flags.formUnion(flag)
+            }
+        }
+    }
+
+    private func dispatchModifier(code: UInt16, pressed: Bool) throws {
+        let count = heldModifierCounts[code, default: 0]
+        guard pressed || count > 0 else { return }
+
+        var updatedCounts = heldModifierCounts
+        let updatedCount = pressed ? count + 1 : count - 1
+        updatedCounts[code] = updatedCount > 0 ? updatedCount : nil
+
+        // Multiple bindings for one virtual key share its first press and final release.
+        if count == 0 || updatedCount == 0 {
+            try keySimulator.modifierChanged(code: code, flags: Self.modifierFlags(for: updatedCounts))
+        }
+        heldModifierCounts = updatedCounts
     }
 
     private func executeShell(_ action: ActionConfig.ShellAction) {

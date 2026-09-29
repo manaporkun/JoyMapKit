@@ -166,6 +166,7 @@ public final class JoyMapService {
         if let index = status.connectedControllers.firstIndex(where: { $0.id == handle.id }) {
             status.connectedControllers.remove(at: index)
         }
+        analogHandler.releaseAllHeldInputs()
         mappingEngine.releaseAllHeldKeys()
         logger.info("Controller disconnected: \(handle.vendorName)")
     }

@@ -11,10 +11,22 @@ public final class MappingEngine {
     private let macroRunner: MacroRunner
     private let logger = Logger(label: "com.joymapkit.engine")
 
+    private struct HeldBinding {
+        let action: ActionConfig
+        let holdBehavior: HoldBehavior
+
+        var hasPressedAction: Bool { holdBehavior != .onRelease }
+    }
+
+    private struct ActiveChord {
+        let id = UUID()
+        let action: ActionConfig
+    }
+
     private var activeProfile: Profile?
-    private var heldBindings: [String: ActionConfig] = [:]
-    /// Elements consumed by an active chord → the chord's action.
-    private var activeChordActions: [String: ActionConfig] = [:]
+    private var heldBindings: [String: HeldBinding] = [:]
+    /// Each member references the same activation, which is released exactly once.
+    private var activeChordActions: [String: ActiveChord] = [:]
     /// Timers for whileHeld auto-repeat, keyed by element name.
     private var whileHeldTimers: [String: Timer] = [:]
     /// Pre-indexed base bindings for O(1) lookup by element name.
@@ -75,8 +87,6 @@ public final class MappingEngine {
     /// Set the active mapping profile. Releases all held keys before switching.
     public func setProfile(_ profile: Profile?) {
         releaseAllHeldKeys()
-        macroRunner.cancelAll()
-        chordDetector.reset()
         layerManager.deactivateAll()
         invalidateAllWhileHeldTimers()
         clearTurboState()
@@ -157,26 +167,32 @@ public final class MappingEngine {
         }
     }
 
-    /// Release all currently held keys. Called during profile switches.
+    /// Cancel pending input and release held outputs on profile changes, stop, or disconnect.
     public func releaseAllHeldKeys() {
-        for (_, action) in heldBindings {
-            dispatch(action, pressed: false)
-        }
+        chordDetector.reset()
+        let held = Array(heldBindings.values)
+        let chords = Array(activeChordActions.values)
         heldBindings.removeAll()
-
-        for (_, action) in activeChordActions {
-            dispatch(action, pressed: false)
-        }
         activeChordActions.removeAll()
 
         invalidateAllWhileHeldTimers()
         for (_, timer) in turboTimers { timer.invalidate() }
         turboTimers.removeAll()
+        macroRunner.cancelAll()
+
+        for binding in held where binding.hasPressedAction {
+            dispatch(binding.action, pressed: false)
+        }
+        var releasedChords = Set<UUID>()
+        for chord in chords where releasedChords.insert(chord.id).inserted {
+            dispatch(chord.action, pressed: false)
+        }
     }
 
     // MARK: - Private — Press/Release Flow
 
     private func handlePress(elementName: String, in profile: Profile) {
+        guard activeChordActions[elementName] == nil else { return }
         let wasHeld = heldBindings[elementName] != nil
 
         // Check chord detector first
@@ -194,13 +210,19 @@ public final class MappingEngine {
 
         case .chordMatched(let binding, let elements):
             // Chord matched — dispatch chord action, suppress individual actions
+            let replacedChordIDs = Set(elements.compactMap { activeChordActions[$0]?.id })
             dispatch(binding.action, pressed: true)
+            for id in replacedChordIDs {
+                releaseChord(id: id)
+            }
+            let chord = ActiveChord(action: binding.action)
             for element in elements {
-                activeChordActions[element] = binding.action
+                activeChordActions[element] = chord
                 // Remove any pending single presses from held state
-                if let heldAction = heldBindings.removeValue(forKey: element) {
-                    dispatch(heldAction, pressed: false)
+                if let held = heldBindings.removeValue(forKey: element), held.hasPressedAction {
+                    dispatch(held.action, pressed: false)
                 }
+                invalidateWhileHeldTimer(for: element)
             }
         }
     }
@@ -209,32 +231,24 @@ public final class MappingEngine {
         chordDetector.handleRelease(elementName)
 
         // Check if this element was part of an active chord
-        if let chordAction = activeChordActions.removeValue(forKey: elementName) {
+        if let chord = activeChordActions[elementName] {
             // Release the chord action when the first chord member is released
-            // Remove all other chord members referencing this same action
-            let sameActionElements = activeChordActions.filter { $0.value == chordAction }.map(\.key)
-            for element in sameActionElements {
-                activeChordActions.removeValue(forKey: element)
-            }
-            dispatch(chordAction, pressed: false)
+            releaseChord(id: chord.id)
             return
         }
 
         // Normal release for single bindings
-        if let heldAction = heldBindings[elementName] {
-            let binding = activeProfile.flatMap { resolveBinding(for: elementName, in: $0) }
-            let holdBehavior = binding?.holdBehavior ?? .onPress
-
-            switch holdBehavior {
+        if let held = heldBindings[elementName] {
+            switch held.holdBehavior {
             case .onPress, .whileHeld:
-                dispatch(heldAction, pressed: false)
+                dispatch(held.action, pressed: false)
                 heldBindings.removeValue(forKey: elementName)
                 invalidateWhileHeldTimer(for: elementName)
 
             case .onRelease:
                 // Tap on release
-                dispatch(heldAction, pressed: true)
-                dispatch(heldAction, pressed: false)
+                dispatch(held.action, pressed: true)
+                dispatch(held.action, pressed: false)
                 heldBindings.removeValue(forKey: elementName)
 
             case .toggle:
@@ -242,6 +256,12 @@ public final class MappingEngine {
                 break
             }
         }
+    }
+
+    private func releaseChord(id: UUID) {
+        guard let chord = activeChordActions.values.first(where: { $0.id == id }) else { return }
+        activeChordActions = activeChordActions.filter { $0.value.id != id }
+        dispatch(chord.action, pressed: false)
     }
 
     /// Called by ChordDetector when the chord window expires for a deferred press.
@@ -259,12 +279,12 @@ public final class MappingEngine {
 
         // Toggle must be handled before the general guard since it needs to fire on re-press
         if case .toggle = holdBehavior, pressed {
-            if let heldAction = heldBindings[elementName] {
-                dispatch(heldAction, pressed: false)
+            if let held = heldBindings[elementName] {
+                dispatch(held.action, pressed: false)
                 heldBindings.removeValue(forKey: elementName)
             } else {
                 dispatch(binding.action, pressed: true)
-                heldBindings[elementName] = binding.action
+                heldBindings[elementName] = HeldBinding(action: binding.action, holdBehavior: holdBehavior)
             }
             return
         }
@@ -274,18 +294,18 @@ public final class MappingEngine {
         switch holdBehavior {
         case .onPress:
             dispatch(binding.action, pressed: true)
-            heldBindings[elementName] = binding.action
+            heldBindings[elementName] = HeldBinding(action: binding.action, holdBehavior: holdBehavior)
 
         case .onRelease:
             // Just track that it's held — action fires on release
-            heldBindings[elementName] = binding.action
+            heldBindings[elementName] = HeldBinding(action: binding.action, holdBehavior: holdBehavior)
 
         case .toggle:
             break // Already handled above
 
         case .whileHeld(let repeatIntervalMs):
             dispatch(binding.action, pressed: true)
-            heldBindings[elementName] = binding.action
+            heldBindings[elementName] = HeldBinding(action: binding.action, holdBehavior: holdBehavior)
             startWhileHeldTimer(for: elementName, action: binding.action, intervalMs: repeatIntervalMs)
         }
     }
@@ -363,10 +383,11 @@ public final class MappingEngine {
 
     private func handleTurboInput(elementName: String, pressed: Bool, in profile: Profile) {
         if pressed {
+            guard heldBindings[elementName] == nil else { return }
             guard let binding = resolveBinding(for: elementName, in: profile) else { return }
             // Start rapid-fire: immediate first press, then repeat at turbo rate
             dispatch(binding.action, pressed: true)
-            heldBindings[elementName] = binding.action
+            heldBindings[elementName] = HeldBinding(action: binding.action, holdBehavior: .onPress)
 
             let interval = Double(max(turboRateMs, 10)) / 1000.0
             turboTimers[elementName]?.invalidate()
@@ -376,8 +397,8 @@ public final class MappingEngine {
             }
         } else {
             // Release
-            if let action = heldBindings.removeValue(forKey: elementName) {
-                dispatch(action, pressed: false)
+            if let held = heldBindings.removeValue(forKey: elementName) {
+                dispatch(held.action, pressed: false)
             }
             invalidateTurboTimer(for: elementName)
         }
